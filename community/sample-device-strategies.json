@@ -1,0 +1,114 @@
+[
+  {
+    "schemaVersion": 1,
+    "entryId": "official-legion-5800h-rtx3060-balanced",
+    "name": "Official Legion 5800H RTX 3060 Balanced Pack",
+    "author": "Performance Scheduler Team",
+    "summary": "Example device strategy pack for a Lenovo Legion style laptop. It contains separate plugged-in and battery-oriented profiles.",
+    "source": "Official",
+    "downloads": 0,
+    "updatedAt": "2026-04-26T00:00:00+00:00",
+    "package": {
+      "schemaVersion": 1,
+      "packageId": "legion-5800h-rtx3060-balanced-pack",
+      "name": "Legion 5800H RTX 3060 Balanced Pack",
+      "author": "Performance Scheduler Team",
+      "summary": "A seed pack showing how one device strategy can contain multiple reusable profiles.",
+      "version": 1,
+      "updatedAt": "2026-04-26T00:00:00+00:00",
+      "source": "Official",
+      "targetDevice": {
+        "manufacturer": "Lenovo",
+        "model": "Legion",
+        "cpuName": "AMD Ryzen 7 5800H",
+        "gpuNames": [
+          "NVIDIA GeForce RTX 3060 Laptop GPU"
+        ],
+        "totalMemoryBytes": 17179869184
+      },
+      "profiles": [
+        {
+          "itemId": "plugged-in-game-balance",
+          "role": "PluggedInDefault",
+          "source": "Bundled",
+          "isEnabledByDefault": true,
+          "notes": "Plugged-in game default for this device pack.",
+          "profile": {
+            "schemaVersion": 1,
+            "id": "device-pack-legion-ac-game-balance",
+            "name": "Legion AC Game Balance",
+            "version": 1,
+            "isEnabled": true,
+            "powerSourceMode": "Ac",
+            "targetClassification": "Game",
+            "match": {
+              "classifications": [
+                "Game"
+              ]
+            },
+            "powerPlan": {
+              "preferredPlanName": "Balanced",
+              "restoreOnExit": true,
+              "acProcessorMaxStatePercent": 95
+            },
+            "priority": {
+              "foregroundPriority": "High",
+              "lowerBackgroundProcesses": true,
+              "preferEfficiencyModeForBackground": true
+            },
+            "gpu": {
+              "mode": "DriverDefault",
+              "allowVendorApi": false
+            },
+            "backgroundPolicies": [
+              {
+                "category": "browser",
+                "targetPriority": "BelowNormal",
+                "preferEfficiencyMode": true
+              }
+            ],
+            "notes": "Example plugged-in profile inside a device strategy package."
+          }
+        },
+        {
+          "itemId": "battery-game-cool",
+          "role": "BatteryDefault",
+          "source": "Bundled",
+          "isEnabledByDefault": true,
+          "notes": "Battery game default for this device pack.",
+          "profile": {
+            "schemaVersion": 1,
+            "id": "device-pack-legion-battery-game-cool",
+            "name": "Legion Battery Game Cool",
+            "version": 1,
+            "isEnabled": true,
+            "powerSourceMode": "Battery",
+            "targetClassification": "Game",
+            "match": {
+              "classifications": [
+                "Game"
+              ]
+            },
+            "powerPlan": {
+              "preferredPlanName": "Balanced",
+              "restoreOnExit": true,
+              "dcProcessorMaxStatePercent": 75
+            },
+            "priority": {
+              "foregroundPriority": "AboveNormal",
+              "lowerBackgroundProcesses": true,
+              "preferEfficiencyModeForBackground": true
+            },
+            "gpu": {
+              "mode": "PreferLowerPower",
+              "clockLimitMHz": 1200,
+              "allowVendorApi": false
+            },
+            "notes": "Example battery profile; GPU fields are stored but not live-applied yet."
+          }
+        }
+      ],
+      "notes": "This is a bundled placeholder for the future device strategy community."
+    }
+  }
+]

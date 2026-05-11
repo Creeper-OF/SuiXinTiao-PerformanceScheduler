@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PerformanceScheduler.App/PerformanceScheduler.App.csproj" />
+    <Project Path="src/PerformanceScheduler.Core/PerformanceScheduler.Core.csproj" />
+    <Project Path="src/PerformanceScheduler.Infrastructure/PerformanceScheduler.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PerformanceScheduler.Tests/PerformanceScheduler.Tests.csproj" />
+  </Folder>
+</Solution>

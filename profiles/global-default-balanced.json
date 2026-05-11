@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "global-default-balanced",
+  "name": "Global Default Balanced",
+  "version": 1,
+  "isEnabled": true,
+  "isGlobalDefault": true,
+  "powerSourceMode": "Any",
+  "targetClassification": "Unknown",
+  "match": {
+    "executableNames": [],
+    "processNames": [],
+    "windowTitleContains": [],
+    "classifications": []
+  },
+  "powerPlan": {
+    "schemeGuid": "381b4222-f694-41f0-9685-ff5bb260df2e",
+    "preferredPlanName": "Balanced",
+    "restoreOnExit": true
+  },
+  "priority": {
+    "foregroundPriority": "AboveNormal",
+    "lowerBackgroundProcesses": false,
+    "preferEfficiencyModeForBackground": false
+  },
+  "gpu": {
+    "mode": "DriverDefault",
+    "allowVendorApi": false
+  },
+  "backgroundPolicies": [],
+  "notes": "Fallback profile used when no app-specific rule matches the current foreground workload."
+}

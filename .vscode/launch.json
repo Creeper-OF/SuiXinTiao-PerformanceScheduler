@@ -1,0 +1,15 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": ".NET Launch PerformanceScheduler.App",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/src/PerformanceScheduler.App/bin/Debug/net10.0-windows/PerformanceScheduler.App.exe",
+      "cwd": "${workspaceFolder}/src/PerformanceScheduler.App",
+      "stopAtEntry": false,
+      "console": "internalConsole"
+    }
+  ]
+}

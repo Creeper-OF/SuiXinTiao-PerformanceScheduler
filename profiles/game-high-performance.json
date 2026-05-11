@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "id": "game-high-performance",
+  "name": "Game High Performance",
+  "version": 1,
+  "isEnabled": true,
+  "powerSourceMode": "Ac",
+  "targetClassification": "Game",
+  "match": {
+    "executableNames": [
+      "eldenring.exe",
+      "valorant.exe",
+      "cs2.exe"
+    ],
+    "processNames": [
+      "eldenring",
+      "valorant",
+      "cs2"
+    ],
+    "windowTitleContains": [
+      "ELDEN RING",
+      "VALORANT",
+      "Counter-Strike"
+    ],
+    "classifications": [
+      "Game"
+    ]
+  },
+  "powerPlan": {
+    "schemeGuid": "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c",
+    "preferredPlanName": "High performance",
+    "restoreOnExit": true
+  },
+  "priority": {
+    "foregroundPriority": "High",
+    "lowerBackgroundProcesses": true,
+    "preferEfficiencyModeForBackground": false
+  },
+  "gpu": {
+    "mode": "DriverDefault",
+    "allowVendorApi": false
+  },
+  "backgroundPolicies": [
+    {
+      "category": "launcher",
+      "targetPriority": "BelowNormal",
+      "preferEfficiencyMode": false,
+      "notes": "Game launchers should back off while the game is active."
+    },
+    {
+      "category": "browser",
+      "targetPriority": "Idle",
+      "preferEfficiencyMode": false,
+      "notes": "Browsers are deprioritized during gaming sessions."
+    },
+    {
+      "category": "communication",
+      "targetPriority": "BelowNormal",
+      "preferEfficiencyMode": false,
+      "notes": "Chat apps stay responsive but yield to the foreground game."
+    },
+    {
+      "category": "default",
+      "targetPriority": "BelowNormal",
+      "preferEfficiencyMode": false,
+      "notes": "Fallback policy for other background desktop apps."
+    }
+  ],
+  "notes": "Baseline gaming profile for high frame rate and low-latency foreground workloads."
+}

@@ -1,0 +1,807 @@
+﻿
+<Window x:Class="PerformanceScheduler.App.MainWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+ xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+ xmlns:models="clr-namespace:PerformanceScheduler.Core.Models;assembly=PerformanceScheduler.Core"
+ xmlns:primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
+ xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+ xmlns:ui="clr-namespace:PerformanceScheduler.App.Ui"
+ xmlns:viewModels="clr-namespace:PerformanceScheduler.App.ViewModels"
+ xmlns:views="clr-namespace:PerformanceScheduler.App.Views"
+ mc:Ignorable="d"
+ Title="{Binding Strings[App.Title]}" Width="1440" Height="900" MinWidth="1220" MinHeight="760" WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="CanResize">
+ <shell:WindowChrome.WindowChrome>
+  <shell:WindowChrome CaptionHeight="66" CornerRadius="0" GlassFrameThickness="0" ResizeBorderThickness="6" UseAeroCaptionButtons="False"/>
+ </shell:WindowChrome.WindowChrome>
+ <Grid>
+  <Grid.Background>
+   <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+    <GradientStop Color="#FFFFFFFF" Offset="0"/>
+    <GradientStop Color="#FFF6F9FE" Offset="0.58"/>
+   <GradientStop Color="#FFEFF5FF" Offset="1"/>
+   </LinearGradientBrush>
+  </Grid.Background>
+  <Image Source="{Binding AppearanceBackgroundImagePath, Converter={StaticResource ImagePathToBitmapConverter}}" Stretch="UniformToFill" Opacity="{Binding AppearanceBackgroundImageOpacity}" Visibility="{Binding AppearanceBackgroundImageVisibility}" IsHitTestVisible="False"/>
+  <Border Margin="0" Padding="0" Background="{Binding AppearanceWindowOverlayBrush}" BorderBrush="#FFE3EAF4" BorderThickness="1" CornerRadius="0">
+   <TabControl Background="Transparent" BorderThickness="0" TabStripPlacement="Left">
+    <TabControl.Resources>
+     <Style x:Key="SidebarTabItemStyle" TargetType="TabItem">
+      <Setter Property="Margin" Value="0,0,0,8"/>
+      <Setter Property="Padding" Value="16,14"/>
+      <Setter Property="Foreground" Value="{StaticResource SidebarMutedBrush}"/>
+      <Setter Property="Template">
+       <Setter.Value>
+        <ControlTemplate TargetType="TabItem">
+         <Border x:Name="ItemBorder" Margin="{TemplateBinding Margin}" Padding="{TemplateBinding Padding}" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="14">
+          <ContentPresenter ContentSource="Header"/>
+         </Border>
+         <ControlTemplate.Triggers>
+          <Trigger Property="IsMouseOver" Value="True">
+           <Setter TargetName="ItemBorder" Property="Background" Value="#FFF1F6FF"/>
+           <Setter Property="Foreground" Value="{StaticResource SidebarTextBrush}"/>
+          </Trigger>
+          <Trigger Property="IsSelected" Value="True">
+           <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource SidebarSelectedBrush}"/>
+           <Setter TargetName="ItemBorder" Property="BorderBrush" Value="#FFBBD5FF"/>
+           <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+          </Trigger>
+         </ControlTemplate.Triggers>
+        </ControlTemplate>
+       </Setter.Value>
+      </Setter>
+     </Style>
+     <Style TargetType="TabItem" BasedOn="{StaticResource SidebarTabItemStyle}"/>
+     <Style x:Key="WindowControlButtonStyle" TargetType="Button">
+      <Setter Property="Width" Value="38"/>
+      <Setter Property="Height" Value="32"/>
+      <Setter Property="Margin" Value="4,0,0,0"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Background" Value="#FFEAF2FF"/>
+      <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+      <Setter Property="BorderBrush" Value="#FFB8D2FF"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="FontSize" Value="15"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome" Value="True"/>
+      <Setter Property="Template">
+       <Setter.Value>
+        <ControlTemplate TargetType="Button">
+         <Border x:Name="WindowButtonSurface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="12">
+          <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="{TemplateBinding FontSize}" FontWeight="{TemplateBinding FontWeight}" Foreground="{TemplateBinding Foreground}" Text="{TemplateBinding Content}"/>
+         </Border>
+         <ControlTemplate.Triggers>
+          <Trigger Property="IsMouseOver" Value="True">
+           <Setter TargetName="WindowButtonSurface" Property="Background" Value="{DynamicResource AccentBrush}"/>
+           <Setter TargetName="WindowButtonSurface" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+           <Setter Property="Foreground" Value="White"/>
+          </Trigger>
+          <Trigger Property="IsPressed" Value="True">
+           <Setter TargetName="WindowButtonSurface" Property="Background" Value="#FF155EE0"/>
+           <Setter TargetName="WindowButtonSurface" Property="BorderBrush" Value="#FF155EE0"/>
+          </Trigger>
+         </ControlTemplate.Triggers>
+        </ControlTemplate>
+       </Setter.Value>
+      </Setter>
+     </Style>
+     <Style x:Key="CloseWindowButtonStyle" TargetType="Button" BasedOn="{StaticResource WindowControlButtonStyle}">
+      <Setter Property="Background" Value="#FFFFEDF0"/>
+      <Setter Property="Foreground" Value="#FFD64045"/>
+      <Setter Property="BorderBrush" Value="#FFFFC4CC"/>
+      <Style.Triggers>
+       <Trigger Property="IsMouseOver" Value="True">
+        <Setter Property="Background" Value="#FFD64045"/>
+        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="BorderBrush" Value="#FFD64045"/>
+       </Trigger>
+      </Style.Triggers>
+     </Style>
+     <Style x:Key="LanguageSwitchButtonStyle" TargetType="Button">
+      <Setter Property="Width" Value="150"/>
+      <Setter Property="Height" Value="34"/>
+      <Setter Property="Margin" Value="0,7,0,0"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Background" Value="#FFFFFFFF"/>
+      <Setter Property="Foreground" Value="{StaticResource TitleBrush}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+      <Setter Property="RenderTransform">
+       <Setter.Value>
+        <TranslateTransform/>
+       </Setter.Value>
+      </Setter>
+      <Setter Property="Template">
+       <Setter.Value>
+        <ControlTemplate TargetType="Button">
+         <Border x:Name="LanguageButtonSurface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="12" SnapsToDevicePixels="True">
+          <Grid ClipToBounds="True">
+           <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="28"/></Grid.ColumnDefinitions>
+           <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Foreground="{TemplateBinding Foreground}" Text="{Binding DataContext.SelectedLanguage.DisplayName, RelativeSource={RelativeSource AncestorType=Window}}"/>
+           <Border Grid.Column="1" Width="20" Height="20" Background="#FFEAF2FF" CornerRadius="10">
+            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" Text="↕"/>
+           </Border>
+          </Grid>
+         </Border>
+         <ControlTemplate.Triggers>
+          <Trigger Property="IsMouseOver" Value="True">
+           <Setter TargetName="LanguageButtonSurface" Property="Background" Value="#FFF6FAFF"/>
+           <Setter TargetName="LanguageButtonSurface" Property="BorderBrush" Value="#FFBFD8FF"/>
+          </Trigger>
+          <Trigger Property="IsPressed" Value="True">
+           <Setter TargetName="LanguageButtonSurface" Property="Background" Value="#FFEAF2FF"/>
+          </Trigger>
+         </ControlTemplate.Triggers>
+        </ControlTemplate>
+       </Setter.Value>
+      </Setter>
+     </Style>
+    </TabControl.Resources>
+    <TabControl.Template>
+     <ControlTemplate TargetType="TabControl">
+      <Grid>
+       <Grid.ColumnDefinitions><ColumnDefinition Width="232"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+       <Border Grid.Column="0" Padding="18,20" Background="Transparent" BorderBrush="{DynamicResource SidebarBorderBrush}" BorderThickness="0,0,1,0">
+        <Grid>
+         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+          <Image Grid.RowSpan="4" Source="{Binding AppearanceSidebarBackgroundImagePath, Converter={StaticResource ImagePathToBitmapConverter}}" Stretch="UniformToFill" Opacity="{Binding AppearanceBackgroundImageOpacity}" Visibility="{Binding AppearanceSidebarBackgroundImageVisibility}" IsHitTestVisible="False"/>
+          <Border Grid.RowSpan="4" Background="{Binding AppearanceSidebarOverlayBrush}" IsHitTestVisible="False"/>
+          <StackPanel>
+           <StackPanel Orientation="Horizontal">
+            <Border Width="42" Height="42" Background="{StaticResource AccentBrush}" CornerRadius="12" HorizontalAlignment="Left"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="22" FontWeight="Bold" Foreground="White" Text="芯"/></Border>
+            <TextBlock Margin="12,4,0,0" FontSize="22" FontWeight="Bold" Foreground="{StaticResource SidebarTextBrush}" Text="{Binding DataContext.Strings[App.Title], RelativeSource={RelativeSource TemplatedParent}}"/>
+           </StackPanel>
+           <TextBlock Margin="0,12,0,0" MaxHeight="50" FontSize="12" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" Foreground="{StaticResource SidebarMutedBrush}" Text="{Binding DataContext.Strings[App.Subtitle], RelativeSource={RelativeSource TemplatedParent}}"/>
+          </StackPanel>
+          <StackPanel Grid.Row="1" Margin="0,18,0,0">
+           <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource SidebarTextBrush}" Text="{Binding DataContext.Strings[App.Language], RelativeSource={RelativeSource TemplatedParent}}"/>
+           <Button Style="{StaticResource LanguageSwitchButtonStyle}" Click="LanguageSwitchButton_Click"/>
+           <Border Margin="0,14,0,0" Padding="12" Background="{StaticResource SidebarSurfaceBrush}" BorderBrush="{StaticResource SidebarBorderBrush}" BorderThickness="1" CornerRadius="16">
+            <StackPanel>
+             <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource SidebarTextBrush}" Text="{Binding DataContext.Strings[Section.NavigationGlance], RelativeSource={RelativeSource TemplatedParent}}"/>
+             <WrapPanel Margin="0,10,0,0">
+              <Border Margin="0,0,8,8" Padding="10,4" Background="#FFEAF2FF" CornerRadius="999"><TextBlock Foreground="{StaticResource AccentBrush}" Text="{Binding DataContext.NavigationNoticesSummary, RelativeSource={RelativeSource TemplatedParent}}"/></Border>
+              <Border Margin="0,0,8,8" Padding="10,4" Background="#FFF1F6FF" CornerRadius="999"><TextBlock Foreground="{StaticResource TitleBrush}" Text="{Binding DataContext.NavigationProfilesSummary, RelativeSource={RelativeSource TemplatedParent}}"/></Border>
+              <Border Margin="0,0,8,8" Padding="10,4" Background="#FFFFF4E2" CornerRadius="999"><TextBlock Foreground="#FF9B6A18" Text="{Binding DataContext.NavigationCommunitySummary, RelativeSource={RelativeSource TemplatedParent}}"/></Border>
+             </WrapPanel>
+            </StackPanel>
+           </Border>
+          </StackPanel>
+          <ScrollViewer Grid.Row="2" Margin="0,18,0,0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" CanContentScroll="False">
+           <TabPanel IsItemsHost="True" Background="Transparent"/>
+          </ScrollViewer>
+          <Border Grid.Row="3" Margin="0,10,0,0" Padding="12" MaxHeight="116" Background="{StaticResource SidebarSurfaceBrush}" BorderBrush="{StaticResource SidebarBorderBrush}" BorderThickness="1" CornerRadius="16">
+           <StackPanel>
+            <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource SidebarTextBrush}" Text="{Binding DataContext.Strings[Section.RuntimeStatus], RelativeSource={RelativeSource TemplatedParent}}"/>
+            <TextBlock Margin="0,8,0,0" FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{StaticResource SidebarTextBrush}" Text="{Binding DataContext.MonitoringModeSummary, RelativeSource={RelativeSource TemplatedParent}}"/>
+            <TextBlock Margin="0,6,0,0" MaxHeight="34" FontSize="12" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" Foreground="{StaticResource SidebarMutedBrush}" Text="{Binding DataContext.MonitoringStatus, RelativeSource={RelativeSource TemplatedParent}}"/>
+            <TextBlock Margin="0,8,0,0" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource SidebarMutedBrush}" Text="{Binding DataContext.LastRefreshTime, RelativeSource={RelativeSource TemplatedParent}}"/>
+           </StackPanel>
+          </Border>
+        </Grid>
+       </Border>
+       <Grid Grid.Column="1">
+        <Grid.RowDefinitions><RowDefinition Height="66"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <Border Grid.Row="0" Padding="24,0,10,0" Background="#FAFFFFFF" BorderBrush="#FFE7EEF7" BorderThickness="0,0,0,1">
+         <Grid VerticalAlignment="Center">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="230"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+          <Border Grid.Column="1" Height="40" Padding="16,0" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" CornerRadius="20" shell:WindowChrome.IsHitTestVisibleInChrome="True">
+           <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBlock FontSize="17" Foreground="{StaticResource AccentBrush}" Text="⌕"/>
+            <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" FontSize="12" Foreground="{StaticResource SidebarMutedBrush}" Text="{Binding DataContext.Strings[Hint.SearchAppOrConfig], RelativeSource={RelativeSource TemplatedParent}}"/>
+           </StackPanel>
+          </Border>
+          <Border Grid.Column="2" Margin="16,0,0,0" Height="40" Padding="14,0" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" CornerRadius="14" shell:WindowChrome.IsHitTestVisibleInChrome="True">
+           <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBlock FontSize="15" Foreground="{StaticResource AccentBrush}" Text="▣"/>
+            <TextBlock Margin="9,0,0,0" MaxWidth="170" TextTrimming="CharacterEllipsis" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding DataContext.DeviceFingerprintSummary, RelativeSource={RelativeSource TemplatedParent}}"/>
+           </StackPanel>
+          </Border>
+          <StackPanel Grid.Column="3" Margin="16,0,0,0" Orientation="Horizontal" VerticalAlignment="Center" shell:WindowChrome.IsHitTestVisibleInChrome="True">
+           <Ellipse Width="10" Height="10" Fill="#FF24C45A"/>
+           <TextBlock Margin="8,0,0,0" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding DataContext.MonitoringModeSummary, RelativeSource={RelativeSource TemplatedParent}}"/>
+          </StackPanel>
+          <Border Grid.Column="4" Margin="16,0,12,0" Width="40" Height="40" Background="#FFF1F5FB" CornerRadius="20" shell:WindowChrome.IsHitTestVisibleInChrome="True">
+           <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="17" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" Text="{Binding DataContext.StatusCenterCount, RelativeSource={RelativeSource TemplatedParent}}"/>
+          </Border>
+          <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center" shell:WindowChrome.IsHitTestVisibleInChrome="True">
+           <Button Style="{StaticResource WindowControlButtonStyle}" Click="MinimizeWindow_Click" Content="━"/>
+           <Button Style="{StaticResource WindowControlButtonStyle}" Click="ToggleMaximizeWindow_Click" Content="□"/>
+           <Button Style="{StaticResource CloseWindowButtonStyle}" Click="CloseWindow_Click" Content="×"/>
+          </StackPanel>
+         </Grid>
+        </Border>
+        <Grid Grid.Row="1">
+         <Image Source="{Binding AppearanceContentBackgroundImagePath, Converter={StaticResource ImagePathToBitmapConverter}}" Stretch="UniformToFill" Opacity="{Binding AppearanceBackgroundImageOpacity}" Visibility="{Binding AppearanceContentBackgroundImageVisibility}" IsHitTestVisible="False"/>
+         <Border Background="{Binding AppearanceContentOverlayBrush}"><ContentPresenter ContentSource="SelectedContent"/></Border>
+        </Grid>
+       </Grid>
+      </Grid>
+     </ControlTemplate>
+    </TabControl.Template>
+    <TabItem>
+     <TabItem.Header>
+      <StackPanel>
+       <DockPanel>
+        <TextBlock DockPanel.Dock="Left" FontSize="17" FontWeight="SemiBold" Foreground="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Foreground}" Text="{Binding DataContext.Strings[Nav.OverviewTitle], RelativeSource={RelativeSource AncestorType=Window}}"/>
+        <Border DockPanel.Dock="Right" Margin="12,0,0,0" Padding="8,2" Background="#1EFFFFFF" CornerRadius="999"><TextBlock FontSize="11" Foreground="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Foreground}" Text="{Binding DataContext.StatusCenterCount, RelativeSource={RelativeSource AncestorType=Window}}"/></Border>
+       </DockPanel>
+       <TextBlock Margin="0,5,0,0" FontSize="12" TextWrapping="Wrap" Foreground="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Foreground}" Opacity="0.78" Text="{Binding DataContext.Strings[Nav.OverviewDescription], RelativeSource={RelativeSource AncestorType=Window}}"/>
+      </StackPanel>
+     </TabItem.Header>
+     <Grid Margin="18">
+       <Grid.RowDefinitions><RowDefinition Height="0.62*"/><RowDefinition Height="1.1*"/><RowDefinition Height="0.86*"/></Grid.RowDefinitions>
+       <Grid>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="1.55*"/><ColumnDefinition Width="0.85*"/><ColumnDefinition Width="0.95*"/></Grid.ColumnDefinitions>
+        <Border Margin="0,0,14,12" Padding="14" Style="{StaticResource CardStyle}" Background="#FFFFFFFF">
+         <Grid>
+          <Grid.ColumnDefinitions><ColumnDefinition Width="78"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+          <Border Width="60" Height="60" Background="#FFEAF2FF" CornerRadius="18" HorizontalAlignment="Left" VerticalAlignment="Center">
+           <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="20" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" Text="App"/>
+          </Border>
+          <StackPanel Grid.Column="1" Margin="4,0,0,0" VerticalAlignment="Center">
+           <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.ForegroundTarget]}"/>
+           <TextBlock Margin="0,5,0,0" FontSize="19" FontWeight="Bold" TextTrimming="CharacterEllipsis" Foreground="{StaticResource TitleBrush}" Text="{Binding FocusedAppName}"/>
+           <TextBlock Margin="0,4,0,0" MaxHeight="30" FontSize="12" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" Text="{Binding FocusedAppDetails}"/>
+           <Border Margin="0,6,0,0" Padding="9,4" HorizontalAlignment="Left" Background="#FFE7F8EC" CornerRadius="10">
+            <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#FF149A48" Text="{Binding ClassificationSummary}"/>
+           </Border>
+          </StackPanel>
+         </Grid>
+        </Border>
+        <Border Grid.Column="1" Margin="0,0,14,12" Padding="14" Style="{StaticResource CardStyle}" Background="#FFFFFFFF">
+         <Grid>
+          <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+          <DockPanel>
+           <TextBlock DockPanel.Dock="Left" FontSize="16" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.QuickActions]}"/>
+           <primitives:ToggleButton DockPanel.Dock="Right" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding IsMonitoringRunning, Mode=OneWay}" Command="{Binding ToggleMonitoringCommand}" IsEnabled="{Binding CanToggleMonitoring}"/>
+          </DockPanel>
+          <Grid Grid.Row="1" Margin="0,8,0,0" VerticalAlignment="Center">
+           <Grid.ColumnDefinitions><ColumnDefinition Width="44"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+           <Border Width="40" Height="40" Background="#FFEAF2FF" CornerRadius="20" HorizontalAlignment="Left">
+            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="20" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" Text="✓"/>
+           </Border>
+           <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+            <TextBlock FontSize="15" FontWeight="Bold" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Foreground="{StaticResource TitleBrush}" Text="{Binding MonitoringToggleButtonText}"/>
+            <TextBlock Margin="0,4,0,0" MaxHeight="30" FontSize="12" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" Text="{Binding MonitoringStatus}"/>
+           </StackPanel>
+          </Grid>
+         </Grid>
+        </Border>
+        <Border Grid.Column="2" Margin="0,0,0,12" Padding="14" Style="{StaticResource CardStyle}" Background="#FFFFFFFF">
+         <StackPanel VerticalAlignment="Center">
+          <TextBlock FontSize="16" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Button.Rollback]}"/>
+          <Border Margin="0,10,0,0" Width="46" Height="46" Background="#FFEAF2FF" CornerRadius="23" HorizontalAlignment="Left">
+           <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="26" Foreground="{StaticResource AccentBrush}" Text="↶"/>
+          </Border>
+          <TextBlock Margin="0,7,0,0" MaxHeight="30" FontSize="12" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" Text="{Binding Strings[Hint.RollbackCard]}"/>
+          <Button Margin="0,8,0,0" Padding="14,7" Content="{Binding Strings[Button.Rollback]}" Command="{Binding RestoreCommand}" Background="#FFFFFFFF" Foreground="{StaticResource AccentBrush}" BorderBrush="#FF9FC3FF" BorderThickness="1"/>
+         </StackPanel>
+        </Border>
+       </Grid>
+       <Border Grid.Row="1" Margin="0,0,0,12" Padding="16" Style="{StaticResource CardStyle}" Background="#FFFFFFFF" BorderBrush="#FFBFD8FF">
+        <StackPanel>
+         <StackPanel Orientation="Horizontal">
+          <TextBlock Margin="0,0,12,0" FontSize="22" Foreground="{StaticResource AccentBrush}" Text="⌁"/>
+          <StackPanel>
+           <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.CurrentSchedulingState]}"/>
+           <TextBlock Margin="0,6,0,0" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding LastSummary}"/>
+          </StackPanel>
+         </StackPanel>
+         <UniformGrid Margin="0,12,0,0" Columns="3">
+          <Border Margin="0,0,12,0" Padding="14" Background="#FFF6FAFF" BorderBrush="#FFE0ECFF" BorderThickness="1" CornerRadius="18">
+           <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="42"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <Border Width="34" Height="34" Background="#FFEAF2FF" CornerRadius="11">
+             <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="19" Foreground="{StaticResource AccentBrush}" Text="⊞"/>
+            </Border>
+            <StackPanel Grid.Column="1" Margin="10,0,0,0">
+             <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource SidebarMutedBrush}" Text="{Binding Strings[Section.MatchedProfile]}"/>
+             <TextBlock Margin="0,5,0,0" FontSize="18" FontWeight="Bold" TextTrimming="CharacterEllipsis" Foreground="{StaticResource TitleBrush}" Text="{Binding MatchedProfileName}"/>
+             <TextBlock Margin="0,5,0,0" MaxHeight="30" FontSize="12" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" Text="{Binding ProfileReason}"/>
+            </StackPanel>
+           </Grid>
+          </Border>
+          <Border Margin="6,0,6,0" Padding="14" Background="#FFF3FBF6" BorderBrush="#FFDFF3E8" BorderThickness="1" CornerRadius="18">
+           <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="42"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <Border Width="34" Height="34" Background="#FFE4F5E8" CornerRadius="11">
+             <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="19" Foreground="#FF20A856" Text="◒"/>
+            </Border>
+            <StackPanel Grid.Column="1" Margin="10,0,0,0">
+             <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource SidebarMutedBrush}" Text="{Binding Strings[Section.PowerPlan]}"/>
+             <TextBlock Margin="0,5,0,0" FontSize="18" FontWeight="Bold" TextTrimming="CharacterEllipsis" Foreground="{StaticResource TitleBrush}" Text="{Binding ActivePowerPlanName}"/>
+            </StackPanel>
+           </Grid>
+          </Border>
+          <Border Margin="12,0,0,0" Padding="14" Background="#FFF8F4FF" BorderBrush="#FFE9DEFF" BorderThickness="1" CornerRadius="18">
+           <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="42"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <Border Width="34" Height="34" Background="#FFF2E9FF" CornerRadius="11">
+             <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="19" Foreground="#FF8557D8" Text="≡"/>
+            </Border>
+            <StackPanel Grid.Column="1" Margin="10,0,0,0">
+             <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource SidebarMutedBrush}" Text="{Binding Strings[Section.Priority]}"/>
+             <TextBlock Margin="0,5,0,0" FontSize="16" FontWeight="Bold" TextTrimming="CharacterEllipsis" Foreground="{StaticResource TitleBrush}" Text="{Binding PrioritySummary}"/>
+            </StackPanel>
+           </Grid>
+          </Border>
+         </UniformGrid>
+         <UniformGrid Margin="0,10,0,0" Columns="3">
+          <Border Margin="0,0,10,0" Padding="12" Background="#FFF9FCFF" BorderBrush="#FFE4ECF7" BorderThickness="1" CornerRadius="16">
+           <StackPanel>
+            <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource SidebarMutedBrush}" Text="{Binding Strings[Section.BasicMetrics]}"/>
+            <TextBlock Margin="0,8,0,0" FontSize="16" FontWeight="Bold" TextTrimming="CharacterEllipsis" Foreground="{StaticResource TitleBrush}" Text="{Binding MetricsSummary}"/>
+           </StackPanel>
+          </Border>
+          <Border Margin="4,0,6,0" Padding="12" Background="#FFFFFBF3" BorderBrush="#FFFFEDD2" BorderThickness="1" CornerRadius="16">
+           <StackPanel>
+            <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#FF9B6A18" Text="{Binding Strings[Section.LastScan]}"/>
+            <TextBlock Margin="0,8,0,0" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Foreground="{StaticResource TitleBrush}" Text="{Binding LastRefreshTime}"/>
+           </StackPanel>
+          </Border>
+          <Border Margin="6,0,4,0" Padding="12" Background="#FFF7FBF8" BorderBrush="#FFE0F0E6" BorderThickness="1" CornerRadius="16">
+           <StackPanel>
+            <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#FF2F7B5A" Text="{Binding Strings[Section.StorageOverview]}"/>
+            <TextBlock Margin="0,8,0,0" MaxHeight="34" FontSize="12" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" Foreground="{StaticResource TitleBrush}" Text="{Binding StorageSummary}"/>
+           </StackPanel>
+          </Border>
+         </UniformGrid>
+        </StackPanel>
+       </Border>
+       <Grid Grid.Row="2">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="1.08*"/><ColumnDefinition Width="0.92*"/></Grid.ColumnDefinitions>
+        <Border Margin="0,0,14,0" Padding="16" Style="{StaticResource CardStyle}" Background="#FFFFFFFF">
+         <StackPanel>
+          <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.GettingStarted]}"/>
+          <TextBlock Margin="0,5,0,0" FontSize="18" FontWeight="Bold" TextTrimming="CharacterEllipsis" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Hint.StartHereTitle]}"/>
+          <UniformGrid Margin="0,12,0,0" Columns="3">
+           <Border Margin="0,0,8,0" Padding="12" Background="#FFF6FAFF" BorderBrush="#FFE1ECFF" BorderThickness="1" CornerRadius="18">
+            <StackPanel>
+             <Border Width="24" Height="24" Background="{StaticResource AccentBrush}" CornerRadius="12" HorizontalAlignment="Left"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12" FontWeight="Bold" Foreground="White" Text="1"/></Border>
+             <TextBlock Margin="0,8,0,0" FontSize="13" FontWeight="Bold" TextWrapping="Wrap" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Hint.StartStep1Title]}"/>
+             <TextBlock Margin="0,5,0,0" MaxHeight="46" FontSize="12" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" Text="{Binding Strings[Hint.StartStep1Body]}"/>
+            </StackPanel>
+           </Border>
+           <Border Margin="4,0,4,0" Padding="12" Background="#FFF6FAFF" BorderBrush="#FFE1ECFF" BorderThickness="1" CornerRadius="18">
+            <StackPanel>
+             <Border Width="24" Height="24" Background="{StaticResource AccentBrush}" CornerRadius="12" HorizontalAlignment="Left"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12" FontWeight="Bold" Foreground="White" Text="2"/></Border>
+             <TextBlock Margin="0,8,0,0" FontSize="13" FontWeight="Bold" TextWrapping="Wrap" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Hint.StartStep2Title]}"/>
+             <TextBlock Margin="0,5,0,0" MaxHeight="46" FontSize="12" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" Text="{Binding Strings[Hint.StartStep2Body]}"/>
+            </StackPanel>
+           </Border>
+           <Border Margin="8,0,0,0" Padding="12" Background="#FFF6FAFF" BorderBrush="#FFE1ECFF" BorderThickness="1" CornerRadius="18">
+            <StackPanel>
+             <Border Width="24" Height="24" Background="{StaticResource AccentBrush}" CornerRadius="12" HorizontalAlignment="Left"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12" FontWeight="Bold" Foreground="White" Text="3"/></Border>
+             <TextBlock Margin="0,8,0,0" FontSize="13" FontWeight="Bold" TextWrapping="Wrap" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Hint.StartStep3Title]}"/>
+             <TextBlock Margin="0,5,0,0" MaxHeight="46" FontSize="12" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" Text="{Binding Strings[Hint.StartStep3Body]}"/>
+            </StackPanel>
+           </Border>
+          </UniformGrid>
+         </StackPanel>
+        </Border>
+        <Border Grid.Column="1" Margin="0" Padding="16" ClipToBounds="True" Style="{StaticResource CardStyle}" Background="#FFFFFFFF">
+         <Grid>
+          <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+          <Grid>
+           <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+           <StackPanel>
+            <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.RecentSchedulingResults]}"/>
+            <TextBlock Margin="0,8,0,0" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding StatusCenterSummary}"/>
+           </StackPanel>
+           <Button Grid.Column="1" Content="{Binding Strings[Button.ClearStatusCenter]}" Command="{Binding ClearStatusCenterCommand}" Background="#FFFFFFFF" Foreground="{StaticResource AccentBrush}" BorderBrush="#FF9FC3FF" BorderThickness="1"/>
+          </Grid>
+          <ListBox Grid.Row="1" Margin="0,10,0,0" ClipToBounds="True" ScrollViewer.CanContentScroll="False" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ui:SmoothScrollBehavior.IsEnabled="True" ItemsSource="{Binding StatusCenterItems}">
+           <ListBox.ItemTemplate>
+            <DataTemplate DataType="{x:Type viewModels:StatusCenterItemViewModel}">
+             <Border Margin="0,0,0,8" Padding="10" Background="#FFF8FBFF" BorderBrush="#FFE2EAF5" BorderThickness="1" CornerRadius="12">
+              <Grid>
+               <Grid.ColumnDefinitions><ColumnDefinition Width="82"/><ColumnDefinition Width="82"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+               <TextBlock FontFamily="Consolas" FontSize="12" Foreground="{StaticResource SidebarMutedBrush}" Text="{Binding Timestamp, StringFormat={}{0:HH:mm:ss}}"/>
+               <Border Grid.Column="1" Padding="8,2" HorizontalAlignment="Left" CornerRadius="999">
+                <Border.Style>
+                 <Style TargetType="Border">
+                  <Setter Property="Background" Value="#FFE8F0F4"/>
+                  <Style.Triggers>
+                   <DataTrigger Binding="{Binding LevelKey}" Value="Success"><Setter Property="Background" Value="#FFE4F5E8"/></DataTrigger>
+                   <DataTrigger Binding="{Binding LevelKey}" Value="Warning"><Setter Property="Background" Value="#FFFFF1D9"/></DataTrigger>
+                   <DataTrigger Binding="{Binding LevelKey}" Value="Error"><Setter Property="Background" Value="#FFFBE1E4"/></DataTrigger>
+                  </Style.Triggers>
+                 </Style>
+                </Border.Style>
+                <TextBlock FontSize="12" FontWeight="SemiBold" Text="{Binding Level}"/>
+               </Border>
+               <TextBlock Grid.Column="2" MaxHeight="34" FontSize="12" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" Text="{Binding Message}"/>
+              </Grid>
+             </Border>
+            </DataTemplate>
+           </ListBox.ItemTemplate>
+          </ListBox>
+         </Grid>
+       </Border>
+      </Grid>
+     </Grid>
+    </TabItem>
+    <TabItem>
+     <TabItem.Header>
+      <StackPanel>
+       <DockPanel>
+        <TextBlock DockPanel.Dock="Left" FontSize="17" FontWeight="SemiBold" Foreground="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Foreground}" Text="{Binding DataContext.Strings[Nav.ProfilesTitle], RelativeSource={RelativeSource AncestorType=Window}}"/>
+        <Border DockPanel.Dock="Right" Margin="12,0,0,0" Padding="8,2" Background="#1EFFFFFF" CornerRadius="999"><TextBlock FontSize="11" Foreground="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Foreground}" Text="{Binding DataContext.LocalProfileCount, RelativeSource={RelativeSource AncestorType=Window}}"/></Border>
+       </DockPanel>
+       <TextBlock Margin="0,5,0,0" FontSize="12" TextWrapping="Wrap" Foreground="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Foreground}" Opacity="0.78" Text="{Binding DataContext.Strings[Nav.ProfilesDescription], RelativeSource={RelativeSource AncestorType=Window}}"/>
+      </StackPanel>
+     </TabItem.Header>
+     <ScrollViewer VerticalScrollBarVisibility="Auto">
+      <Grid Margin="28">
+       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+       <Border Style="{StaticResource CardStyle}" Padding="26" Background="#FFF9FCFD">
+        <Grid>
+         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+         <StackPanel><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.ProfileLibrary]}"/><TextBlock Margin="0,8,0,0" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding ProfileEditorStatus}"/></StackPanel>
+         <WrapPanel Grid.Column="1" HorizontalAlignment="Right">
+          <Button Content="{Binding Strings[Button.Reload]}" Command="{Binding ReloadProfilesCommand}" Background="#FF315F72"/>
+          <Button Content="{Binding Strings[Button.New]}" Command="{Binding NewProfileCommand}" Background="#FF1F7A5C"/>
+          <Button Content="{Binding Strings[Button.Save]}" Command="{Binding SaveProfileCommand}"/>
+          <Button Content="{Binding Strings[Button.Import]}" Command="{Binding ImportProfilesCommand}" Background="#FF6178A6"/>
+          <Button Content="{Binding Strings[Button.Export]}" Command="{Binding ExportProfilesCommand}" Background="#FF946C2B"/>
+          <Button Content="{Binding Strings[Button.ImportMigration]}" Command="{Binding ImportMigrationPackageCommand}" Background="#FF5B86A8"/>
+          <Button Content="{Binding Strings[Button.ExportMigration]}" Command="{Binding ExportMigrationPackageCommand}" Background="#FF2E9AAE"/>
+          <Button Content="{Binding Strings[Button.RollbackRevision]}" Command="{Binding RollbackProfileCommand}" Background="#FF8A3B49"/>
+         </WrapPanel>
+        </Grid>
+       </Border>
+       <Border Grid.Row="1" Style="{StaticResource CardStyle}" Background="#FFFDFBF5">
+        <Grid>
+         <Grid.ColumnDefinitions><ColumnDefinition Width="1*"/><ColumnDefinition Width="1*"/><ColumnDefinition Width="1*"/></Grid.ColumnDefinitions>
+         <StackPanel Margin="0,0,12,0">
+          <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#FF9B6A18" Text="{Binding Strings[Section.OperationPath]}"/>
+          <TextBlock Margin="0,8,0,0" FontSize="15" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Hint.ProfilePathCommunityTitle]}"/>
+          <TextBlock Margin="0,8,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding Strings[Hint.ProfilePathCommunityBody]}"/>
+         </StackPanel>
+         <StackPanel Grid.Column="1" Margin="12,0,12,0">
+          <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.LocalDeviceStrategies]}"/>
+          <TextBlock Margin="0,8,0,0" FontSize="15" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Hint.ProfilePathLocalTitle]}"/>
+          <TextBlock Margin="0,8,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding Strings[Hint.ProfilePathLocalBody]}"/>
+         </StackPanel>
+         <StackPanel Grid.Column="2" Margin="12,0,0,0">
+          <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#FF2F7B5A" Text="{Binding Strings[Section.SavedProfiles]}"/>
+          <TextBlock Margin="0,8,0,0" FontSize="15" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Hint.ProfilePathEditTitle]}"/>
+          <TextBlock Margin="0,8,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding Strings[Hint.ProfilePathEditBody]}"/>
+         </StackPanel>
+        </Grid>
+       </Border>
+       <Border Grid.Row="2" Margin="0,0,0,20" Style="{StaticResource CardStyle}" Background="#FFF6FBFD">
+        <Grid>
+         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+         <Grid>
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+          <StackPanel>
+           <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.CommunityHub]}"/>
+           <TextBlock Margin="0,8,0,0" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.Community]}"/>
+           <TextBlock Margin="0,8,0,0" FontSize="13" TextWrapping="Wrap" Text="{Binding Strings[Hint.CommunityHub]}"/>
+           <TextBlock Margin="0,10,0,0" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding CommunityCatalogStatus}"/>
+           <TextBlock Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource AccentBrush}" Text="{Binding CommunityFilterSummary}"/>
+           <WrapPanel Margin="0,12,0,0">
+            <Border Padding="10,4" Margin="0,0,8,0" Background="#FFE7F4F6" CornerRadius="999"><TextBlock Text="{Binding Strings[Community.FilterPluggedIn]}"/></Border>
+            <Border Padding="10,4" Background="#FFFFF3E5" CornerRadius="999"><TextBlock Text="{Binding Strings[Community.FilterBattery]}"/></Border>
+           </WrapPanel>
+          </StackPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+           <Button Content="{Binding Strings[Button.RefreshCommunity]}" Command="{Binding RefreshCommunityCatalogCommand}" Background="#FF6178A6"/>
+           <Button Content="{Binding Strings[Button.ImportDeviceStrategy]}" Command="{Binding ImportCommunityDeviceStrategyCommand}" Visibility="{Binding CommunityDeviceStrategiesVisibility}" Background="#FF315F72"/>
+           <Button Content="{Binding Strings[Button.ImportCommunity]}" Command="{Binding ImportCommunityProfileCommand}" Visibility="{Binding CommunityProfilesVisibility}" Background="#FF315F72"/>
+          </StackPanel>
+         </Grid>
+         <Grid Grid.Row="1" Margin="0,18,0,0">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="1.2*"/><ColumnDefinition Width="0.9*"/><ColumnDefinition Width="0.9*"/><ColumnDefinition Width="0.9*"/></Grid.ColumnDefinitions>
+          <StackPanel Margin="0,0,10,0"><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.Search]}"/><TextBox Text="{Binding CommunitySearchText, UpdateSourceTrigger=PropertyChanged}"/></StackPanel>
+          <StackPanel Grid.Column="1" Margin="10,0,10,0"><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.SourceFilter]}"/><ComboBox ItemsSource="{Binding CommunitySourceFilterOptions}" DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding SelectedCommunitySourceFilter, Mode=TwoWay}"/></StackPanel>
+          <StackPanel Grid.Column="2" Margin="10,0,10,0"><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.PowerSourceMode]}"/><ComboBox ItemsSource="{Binding CommunityPowerFilterOptions}" DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding SelectedCommunityPowerFilter, Mode=TwoWay}"/></StackPanel>
+          <StackPanel Grid.Column="3" Margin="10,0,0,0"><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.TargetClassification]}"/><ComboBox ItemsSource="{Binding CommunityClassificationFilterOptions}" DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding SelectedCommunityClassificationFilter, Mode=TwoWay}"/></StackPanel>
+         </Grid>
+         <Grid Grid.Row="2" Margin="0,18,0,0">
+          <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+          <Border Height="44" Padding="4" Background="#FFE8F4F7" BorderBrush="#FFD1E4EA" BorderThickness="1" CornerRadius="22">
+           <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <Button Grid.Column="0" Content="{Binding Strings[Section.DeviceStrategies]}" Command="{Binding SelectCommunitySectionCommand}" CommandParameter="DeviceStrategies" Margin="0" Padding="14,8">
+             <Button.Style>
+              <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+               <Setter Property="Background" Value="Transparent"/>
+               <Setter Property="Foreground" Value="{StaticResource TitleBrush}"/>
+               <Style.Triggers>
+                <DataTrigger Binding="{Binding IsCommunityDeviceStrategiesSelected}" Value="True">
+                 <Setter Property="Background" Value="#FF1E8FA3"/>
+                 <Setter Property="Foreground" Value="White"/>
+                </DataTrigger>
+               </Style.Triggers>
+              </Style>
+             </Button.Style>
+            </Button>
+            <Button Grid.Column="1" Content="{Binding Strings[Section.StandaloneProfiles]}" Command="{Binding SelectCommunitySectionCommand}" CommandParameter="Profiles" Margin="0" Padding="14,8">
+             <Button.Style>
+              <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+               <Setter Property="Background" Value="Transparent"/>
+               <Setter Property="Foreground" Value="{StaticResource TitleBrush}"/>
+               <Style.Triggers>
+                <DataTrigger Binding="{Binding IsCommunityProfilesSelected}" Value="True">
+                 <Setter Property="Background" Value="#FF1E8FA3"/>
+                 <Setter Property="Foreground" Value="White"/>
+                </DataTrigger>
+               </Style.Triggers>
+              </Style>
+             </Button.Style>
+            </Button>
+           </Grid>
+          </Border>
+         <ListBox Grid.Row="1" Margin="0,14,0,0" Height="190" Visibility="{Binding CommunityDeviceStrategiesVisibility}" ItemsSource="{Binding CommunityDeviceStrategies}" SelectedItem="{Binding SelectedCommunityDeviceStrategy, Mode=TwoWay}">
+           <ListBox.ItemTemplate>
+            <DataTemplate DataType="{x:Type viewModels:CommunityDeviceStrategyListItemViewModel}">
+             <Border Margin="0,0,0,10" Padding="14" Background="White" BorderBrush="#FFE2E8EC" BorderThickness="1" CornerRadius="14">
+              <StackPanel>
+               <TextBlock FontSize="15" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding Name}"/>
+               <TextBlock Margin="0,6,0,0" FontSize="12" Text="{Binding Summary}"/>
+               <TextBlock Margin="0,6,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding Description}"/>
+               <TextBlock Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource AccentBrush}" Text="{Binding Meta}"/>
+              </StackPanel>
+             </Border>
+            </DataTemplate>
+           </ListBox.ItemTemplate>
+          </ListBox>
+         <ListBox Grid.Row="1" Margin="0,14,0,0" Height="190" Visibility="{Binding CommunityProfilesVisibility}" ItemsSource="{Binding CommunityProfiles}" SelectedItem="{Binding SelectedCommunityProfile, Mode=TwoWay}">
+          <ListBox.ItemTemplate>
+           <DataTemplate DataType="{x:Type viewModels:CommunityProfileListItemViewModel}">
+            <Border Margin="0,0,0,10" Padding="14" Background="White" BorderBrush="#FFE2E8EC" BorderThickness="1" CornerRadius="14">
+             <StackPanel>
+              <TextBlock FontSize="15" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding Name}"/>
+              <TextBlock Margin="0,6,0,0" FontSize="12" Text="{Binding Summary}"/>
+              <TextBlock Margin="0,6,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding Description}"/>
+              <TextBlock Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource AccentBrush}" Text="{Binding Meta}"/>
+             </StackPanel>
+            </Border>
+           </DataTemplate>
+          </ListBox.ItemTemplate>
+         </ListBox>
+         </Grid>
+        </Grid>
+       </Border>
+       <Grid Grid.Row="3"><Grid.ColumnDefinitions><ColumnDefinition Width="0.72*"/><ColumnDefinition Width="1.38*"/></Grid.ColumnDefinitions>
+        <Border Grid.Column="0" Margin="0,0,12,0" Style="{StaticResource CardStyle}" Background="#FFF7FAFB">
+         <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+          <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.LocalDeviceStrategies]}"/>
+          <ListBox Grid.Row="1" Margin="0,12,0,18" Height="170" ItemsSource="{Binding DeviceStrategyPackages}" SelectedItem="{Binding SelectedDeviceStrategyPackage, Mode=TwoWay}">
+           <ListBox.ItemTemplate><DataTemplate DataType="{x:Type viewModels:DeviceStrategyPackageListItemViewModel}"><Border Margin="0,0,0,10" Padding="14" Background="White" BorderBrush="#FFD6E8EF" BorderThickness="1" CornerRadius="14"><StackPanel><TextBlock FontSize="15" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding Name}"/><TextBlock Margin="0,6,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding Summary}"/><TextBlock Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource AccentBrush}" Text="{Binding Meta}"/></StackPanel></Border></DataTemplate></ListBox.ItemTemplate>
+          </ListBox>
+          <TextBlock Grid.Row="2" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.SavedProfiles]}"/>
+          <ListBox Grid.Row="3" Margin="0,16,0,0" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile, Mode=TwoWay}">
+           <ListBox.ItemTemplate><DataTemplate DataType="{x:Type viewModels:ProfileListItemViewModel}"><Border Margin="0,0,0,10" Padding="14" Background="White" BorderBrush="#FFE2E8EC" BorderThickness="1" CornerRadius="14"><StackPanel><TextBlock FontSize="15" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding Name}"/><TextBlock Margin="0,6,0,0" FontSize="12" Text="{Binding Summary}"/><TextBlock Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource AccentBrush}" Text="{Binding EnabledText}"/></StackPanel></Border></DataTemplate></ListBox.ItemTemplate>
+          </ListBox>
+         </Grid>
+        </Border>
+        <Border Grid.Column="1" Margin="12,0,0,0" Style="{StaticResource CardStyle}" Background="#FFFCFDFC"><StackPanel>
+         <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="1*"/><ColumnDefinition Width="1*"/></Grid.ColumnDefinitions>
+          <StackPanel Margin="0,0,10,0"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.ProfileName]}"/><TextBox Text="{Binding ProfileDraft.Name, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"/></StackPanel>
+          <StackPanel Grid.Column="1" Margin="10,0,0,0"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.Version]}"/><TextBox Text="{Binding ProfileDraft.Version, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True, ValidatesOnExceptions=True, NotifyOnValidationError=True}"/></StackPanel>
+         </Grid>
+         <Grid Margin="0,14,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="1*"/><ColumnDefinition Width="1*"/><ColumnDefinition Width="1*"/><ColumnDefinition Width="1*"/></Grid.ColumnDefinitions>
+          <StackPanel Margin="0,0,10,0"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.TargetClassification]}"/><ComboBox ItemsSource="{Binding ClassificationOptions}" DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding ProfileDraft.TargetClassification, Mode=TwoWay, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"/></StackPanel>
+          <StackPanel Grid.Column="1" Margin="10,0,10,0"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.ForegroundPriority]}"/><ComboBox ItemsSource="{Binding PriorityOptions}" DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding ProfileDraft.ForegroundPriority, Mode=TwoWay}"/></StackPanel>
+          <StackPanel Grid.Column="2" Margin="10,0,10,0"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.PowerSourceMode]}"/><ComboBox ItemsSource="{Binding PowerSourceOptions}" DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding ProfileDraft.PowerSourceMode, Mode=TwoWay}"/></StackPanel>
+          <StackPanel Grid.Column="3" Margin="10,0,0,0"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.PowerPlanSelection]}"/><ComboBox ItemsSource="{Binding PowerPlanOptions}" SelectedItem="{Binding ProfileDraft.SelectedPowerPlan, Mode=TwoWay}" DisplayMemberPath="DisplayName"/></StackPanel>
+         </Grid>
+         <StackPanel Margin="0,14,0,0" Orientation="Horizontal">
+          <CheckBox Content="{Binding Strings[Common.Enabled]}" IsChecked="{Binding ProfileDraft.IsEnabled, Mode=TwoWay}"/>
+          <CheckBox Margin="20,10,0,0" Content="{Binding Strings[Hint.RestorePowerPlan]}" IsChecked="{Binding ProfileDraft.RestoreOnExit, Mode=TwoWay}"/>
+          <CheckBox Margin="20,10,0,0" Content="{Binding Strings[Hint.GlobalDefaultProfile]}" IsChecked="{Binding ProfileDraft.IsGlobalDefault, Mode=TwoWay}"/>
+         </StackPanel>
+         <Border Margin="0,14,0,0" Padding="12" Background="#FFF8FCFD" CornerRadius="14">
+          <Border.Style><Style TargetType="Border"><Setter Property="BorderBrush" Value="#FFDCE8EE"/><Setter Property="BorderThickness" Value="1"/><Style.Triggers><DataTrigger Binding="{Binding ProfileDraft.HasPowerPlanIssues}" Value="True"><Setter Property="BorderBrush" Value="{StaticResource ValidationBrush}"/><Setter Property="BorderThickness" Value="2"/></DataTrigger></Style.Triggers></Style></Border.Style>
+          <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="0.72*"/><ColumnDefinition Width="1.28*"/></Grid.ColumnDefinitions>
+           <StackPanel Margin="0,0,10,0"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.ProcessorMaxState]}"/><TextBox Text="{Binding ProfileDraft.ProcessorMaxStatePercentText, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"/></StackPanel>
+           <TextBlock Grid.Column="1" Margin="10,3,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding Strings[Hint.ProcessorMaxState]}"/>
+          </Grid>
+         </Border>
+         <Border Margin="0,14,0,0" Padding="12" Background="#FFFDFEFE" BorderBrush="#FFE0E8EC" BorderThickness="1" CornerRadius="14">
+          <Border.Style><Style TargetType="Border"><Setter Property="BorderBrush" Value="#FFE0E8EC"/><Setter Property="BorderThickness" Value="1"/><Style.Triggers><DataTrigger Binding="{Binding ProfileDraft.HasMatchRuleIssues}" Value="True"><Setter Property="BorderBrush" Value="{StaticResource ValidationBrush}"/><Setter Property="BorderThickness" Value="2"/></DataTrigger></Style.Triggers></Style></Border.Style>
+          <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="1*"/><ColumnDefinition Width="1*"/><ColumnDefinition Width="1*"/></Grid.ColumnDefinitions>
+           <StackPanel Margin="0,0,10,0"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.ExecutableNames]}"/><TextBlock FontSize="12" Text="{Binding Strings[Hint.ExecutableNames]}"/><TextBox Height="120" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" Text="{Binding ProfileDraft.ExecutableNamesText, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"/></StackPanel>
+           <StackPanel Grid.Column="1" Margin="10,0,10,0"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.ProcessNames]}"/><TextBlock FontSize="12" Text="{Binding Strings[Hint.ProcessNames]}"/><TextBox Height="120" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" Text="{Binding ProfileDraft.ProcessNamesText, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"/></StackPanel>
+           <StackPanel Grid.Column="2" Margin="10,0,0,0"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.WindowTitleContains]}"/><TextBlock FontSize="12" Text="{Binding Strings[Hint.WindowTitleContains]}"/><TextBox Height="120" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" Text="{Binding ProfileDraft.WindowTitleContainsText, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"/></StackPanel>
+          </Grid>
+         </Border>
+         <Border Margin="0,14,0,0" Padding="14" Background="#FFF7FAFB" BorderBrush="#FFE0E8EC" BorderThickness="1" CornerRadius="14">
+          <Border.Style><Style TargetType="Border"><Setter Property="BorderBrush" Value="#FFE0E8EC"/><Setter Property="BorderThickness" Value="1"/><Style.Triggers><DataTrigger Binding="{Binding ProfileDraft.HasBackgroundPolicyIssues}" Value="True"><Setter Property="BorderBrush" Value="{StaticResource ValidationBrush}"/><Setter Property="BorderThickness" Value="2"/></DataTrigger></Style.Triggers></Style></Border.Style>
+          <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+           <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.BackgroundPolicies]}"/><TextBlock Margin="0,4,0,0" FontSize="12" Text="{Binding Strings[Hint.BackgroundPolicies]}"/></StackPanel><Button Grid.Column="1" Content="{Binding Strings[Button.AddPolicy]}" Command="{Binding AddBackgroundPolicyCommand}" Background="#FF1F7A5C"/></Grid>
+           <ItemsControl Grid.Row="1" Margin="0,14,0,0" ItemsSource="{Binding ProfileDraft.BackgroundPolicies}">
+            <ItemsControl.ItemTemplate>
+             <DataTemplate DataType="{x:Type viewModels:BackgroundPolicyDraftItemViewModel}">
+              <Border Margin="0,0,0,10" Padding="12" Background="White" BorderBrush="#FFE2E8EC" BorderThickness="1" CornerRadius="12">
+               <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><Grid.ColumnDefinitions><ColumnDefinition Width="1*"/><ColumnDefinition Width="1*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel Margin="0,0,10,0"><TextBlock FontSize="12" FontWeight="SemiBold" Text="{Binding DataContext.Strings[Section.Category], RelativeSource={RelativeSource AncestorType=Window}}"/><ComboBox ItemsSource="{Binding DataContext.BackgroundPolicyCategoryOptions, RelativeSource={RelativeSource AncestorType=Window}}" DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding Category, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/></StackPanel>
+                <StackPanel Grid.Column="1" Margin="10,0,10,0"><TextBlock FontSize="12" FontWeight="SemiBold" Text="{Binding DataContext.Strings[Section.TargetPriority], RelativeSource={RelativeSource AncestorType=Window}}"/><ComboBox ItemsSource="{Binding DataContext.PriorityOptions, RelativeSource={RelativeSource AncestorType=Window}}" DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding TargetPriority, Mode=TwoWay}"/></StackPanel>
+                <Button Grid.Column="2" VerticalAlignment="Bottom" Content="{Binding DataContext.Strings[Button.Remove], RelativeSource={RelativeSource AncestorType=Window}}" Command="{Binding DataContext.RemoveBackgroundPolicyCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Background="#FF8A3B49"/>
+                <StackPanel Grid.Row="1" Grid.ColumnSpan="3" Margin="0,12,0,0"><CheckBox Content="{Binding DataContext.Strings[Hint.PreferEfficiencyMode], RelativeSource={RelativeSource AncestorType=Window}}" IsChecked="{Binding PreferEfficiencyMode, Mode=TwoWay}"/><TextBlock Margin="0,8,0,0" FontSize="12" FontWeight="SemiBold" Text="{Binding DataContext.Strings[Section.Notes], RelativeSource={RelativeSource AncestorType=Window}}"/><TextBox MinHeight="64" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Text="{Binding Notes, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/></StackPanel>
+               </Grid>
+              </Border>
+             </DataTemplate>
+            </ItemsControl.ItemTemplate>
+           </ItemsControl>
+          </Grid>
+         </Border>
+         <Border Margin="0,14,0,0" Padding="14" Background="#FFF6F8FD" BorderBrush="#FFDCE3F2" BorderThickness="1" CornerRadius="14">
+          <Border.Style><Style TargetType="Border"><Setter Property="BorderBrush" Value="#FFDCE3F2"/><Setter Property="BorderThickness" Value="1"/><Style.Triggers><DataTrigger Binding="{Binding ProfileDraft.HasGpuIssues}" Value="True"><Setter Property="BorderBrush" Value="{StaticResource ValidationBrush}"/><Setter Property="BorderThickness" Value="2"/></DataTrigger></Style.Triggers></Style></Border.Style>
+          <StackPanel>
+           <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.GpuStrategy]}"/>
+           <TextBlock Margin="0,4,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding Strings[Hint.GpuStrategy]}"/>
+           <Border Margin="0,12,0,0" Padding="12" Background="#FFFFFFFF" BorderBrush="#FFE1E6F0" BorderThickness="1" CornerRadius="12">
+            <StackPanel>
+             <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#FF4E65A8" Text="{Binding GpuAdapterSummary}"/>
+             <TextBlock Margin="0,6,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding GpuCapabilitySummary}"/>
+            </StackPanel>
+           </Border>
+           <Grid Margin="0,14,0,0" IsEnabled="False"><Grid.ColumnDefinitions><ColumnDefinition Width="1.2*"/><ColumnDefinition Width="0.9*"/><ColumnDefinition Width="0.9*"/></Grid.ColumnDefinitions>
+            <StackPanel Margin="0,0,10,0"><TextBlock FontSize="12" FontWeight="SemiBold" Text="{Binding Strings[Section.GpuMode]}"/><ComboBox ItemsSource="{Binding GpuModeOptions}" DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding ProfileDraft.GpuMode, Mode=TwoWay}"/></StackPanel>
+            <StackPanel Grid.Column="1" Margin="10,0,10,0"><TextBlock FontSize="12" FontWeight="SemiBold" Text="{Binding Strings[Section.GpuClockLimit]}"/><TextBox Text="{Binding ProfileDraft.GpuMaxCoreClockMHzText, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"/></StackPanel>
+            <StackPanel Grid.Column="2" Margin="10,0,0,0"><TextBlock FontSize="12" FontWeight="SemiBold" Text="{Binding Strings[Section.GpuVoltageOffset]}"/><TextBox Text="{Binding ProfileDraft.GpuVoltageOffsetMvText, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"/></StackPanel>
+           </Grid>
+           <CheckBox Margin="0,12,0,0" Content="{Binding Strings[Hint.GpuVendorApi]}" IsChecked="{Binding ProfileDraft.GpuAllowVendorApi, Mode=TwoWay}" IsEnabled="False"/>
+           <TextBlock Margin="0,8,0,0" FontSize="12" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Hint.GpuStrategyPlanned]}"/>
+          </StackPanel>
+         </Border>
+         <Grid Margin="0,14,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="1.2*"/><ColumnDefinition Width="0.8*"/></Grid.ColumnDefinitions>
+          <StackPanel Margin="0,0,12,0"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.Notes]}"/><TextBox MinHeight="160" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Text="{Binding ProfileDraft.Notes, UpdateSourceTrigger=PropertyChanged}"/></StackPanel>
+          <StackPanel Grid.Column="1" Margin="12,0,0,0"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.Validation]}"/><TextBlock Margin="0,6,0,0" FontSize="12" Text="{Binding ValidationSummary}"/>
+           <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding ValidationIssues}"><ItemsControl.ItemTemplate><DataTemplate><Border Margin="0,0,0,8" Padding="8" Background="#FFFFF4E8" CornerRadius="10"><TextBlock FontSize="12" TextWrapping="Wrap" Text="{Binding}"/></Border></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+           <TextBlock Margin="0,12,0,0" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.RevisionHistory]}"/>
+           <ListBox Margin="0,8,0,0" Height="170" ItemsSource="{Binding ProfileHistory}" SelectedItem="{Binding SelectedProfileRevision, Mode=TwoWay}">
+            <ListBox.ItemTemplate><DataTemplate DataType="{x:Type models:ProfileRevisionInfo}"><Border Margin="0,0,0,8" Padding="10" Background="#FFF7FAFB" BorderBrush="#FFE1E8EC" BorderThickness="1" CornerRadius="10"><StackPanel><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding DisplayName}"/><TextBlock Margin="0,4,0,0" FontSize="11" Text="{Binding Profile.Notes}" TextTrimming="CharacterEllipsis"/></StackPanel></Border></DataTemplate></ListBox.ItemTemplate>
+           </ListBox>
+          </StackPanel>
+         </Grid>
+        </StackPanel></Border>
+       </Grid>
+      </Grid>
+     </ScrollViewer>
+    </TabItem>
+    <TabItem>
+     <TabItem.Header><StackPanel><TextBlock FontSize="17" FontWeight="SemiBold" Foreground="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Foreground}" Text="{Binding DataContext.Strings[Nav.DiagnosticsTitle], RelativeSource={RelativeSource AncestorType=Window}}"/><TextBlock Margin="0,5,0,0" FontSize="12" TextWrapping="Wrap" Foreground="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Foreground}" Opacity="0.78" Text="{Binding DataContext.Strings[Nav.DiagnosticsDescription], RelativeSource={RelativeSource AncestorType=Window}}"/></StackPanel></TabItem.Header>
+     <ScrollViewer VerticalScrollBarVisibility="Auto">
+      <Grid Margin="28"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+       <UniformGrid Columns="4" Margin="0,0,0,20"><Border Margin="0,0,14,0" Style="{StaticResource CardStyle}" Background="#FFF8FBFD"><StackPanel><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.RuntimeStatus]}"/><TextBlock Margin="0,10,0,0" FontSize="15" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding MonitoringModeSummary}"/><TextBlock Margin="0,8,0,0" FontSize="13" TextWrapping="Wrap" Text="{Binding MonitoringStatus}"/><TextBlock Margin="0,10,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding LastRefreshTime}"/></StackPanel></Border><Border Margin="0,0,14,0" Style="{StaticResource CardStyle}" Background="#FFF7FAFB"><StackPanel><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.Storage]}"/><TextBlock Margin="0,10,0,0" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding StorageSummary}"/></StackPanel></Border><Border Margin="0,0,14,0" Style="{StaticResource CardStyle}" Background="#FFF6F8FD"><StackPanel><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#FF4E65A8" Text="{Binding Strings[Section.GpuReadiness]}"/><TextBlock Margin="0,10,0,0" FontSize="16" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding GpuAdapterSummary}"/><TextBlock Margin="0,10,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding GpuCapabilitySummary}"/></StackPanel></Border><Border Style="{StaticResource CardStyle}" Background="#FFF3FAFE"><StackPanel><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#FF277EA3" Text="{Binding Strings[Section.DeviceFingerprint]}"/><TextBlock Margin="0,10,0,0" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource TitleBrush}" Text="{Binding DeviceFingerprintSummary}"/></StackPanel></Border></UniformGrid>
+       <Grid Grid.Row="1"><Grid.ColumnDefinitions><ColumnDefinition Width="0.9*"/><ColumnDefinition Width="1.4*"/></Grid.ColumnDefinitions>
+        <Border Grid.Column="0" Margin="0,0,9,0" Style="{StaticResource CardStyle}"><StackPanel><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.CapabilityDetector]}"/><ItemsControl Margin="0,16,0,0" ItemsSource="{Binding CapabilityLines}"><ItemsControl.ItemTemplate><DataTemplate><Border Margin="0,0,0,10" Padding="12" Background="#FFF5F8FA" CornerRadius="12"><TextBlock FontSize="13" TextWrapping="Wrap" Text="{Binding}"/></Border></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></StackPanel></Border>
+        <Border Grid.Column="1" Margin="9,0,0,0" Style="{StaticResource CardStyle}"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions><StackPanel Orientation="Horizontal"><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.RecentLogs]}"/><TextBlock Margin="12,0,0,0" FontSize="12" Text="{Binding LastRefreshTime}"/></StackPanel><ListBox Grid.Row="1" Margin="0,16,0,0" ItemsSource="{Binding RecentLogs}"><ListBox.ItemTemplate><DataTemplate DataType="{x:Type models:LogEntry}"><Border Margin="0,0,0,10" Padding="12" Background="#FFF8FAFB" BorderBrush="#FFE3E8EC" BorderThickness="1" CornerRadius="12"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="140"/><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock FontFamily="Consolas" Text="{Binding Timestamp, StringFormat={}{0:HH:mm:ss}}"/><TextBlock Grid.Column="1" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Level}"/><TextBlock Grid.Column="2" TextWrapping="Wrap" Text="{Binding Message}"/></Grid></Border></DataTemplate></ListBox.ItemTemplate></ListBox></Grid></Border>
+       </Grid>
+      </Grid>
+     </ScrollViewer>
+    </TabItem>
+    <TabItem>
+     <TabItem.Header><StackPanel><TextBlock FontSize="17" FontWeight="SemiBold" Foreground="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Foreground}" Text="{Binding DataContext.Strings[Nav.AppearanceTitle], RelativeSource={RelativeSource AncestorType=Window}}"/><TextBlock Margin="0,5,0,0" FontSize="12" TextWrapping="Wrap" Foreground="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Foreground}" Opacity="0.78" Text="{Binding DataContext.Strings[Nav.AppearanceDescription], RelativeSource={RelativeSource AncestorType=Window}}"/></StackPanel></TabItem.Header>
+     <views:AppearancePage/>
+    </TabItem>
+    <TabItem>
+     <TabItem.Header><StackPanel><TextBlock FontSize="17" FontWeight="SemiBold" Foreground="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Foreground}" Text="{Binding DataContext.Strings[Nav.SettingsTitle], RelativeSource={RelativeSource AncestorType=Window}}"/><TextBlock Margin="0,5,0,0" FontSize="12" TextWrapping="Wrap" Foreground="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Foreground}" Opacity="0.78" Text="{Binding DataContext.Strings[Nav.SettingsDescription], RelativeSource={RelativeSource AncestorType=Window}}"/></StackPanel></TabItem.Header>
+     <ScrollViewer VerticalScrollBarVisibility="Auto">
+      <Grid Margin="28">
+       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+       <Border Style="{StaticResource CardStyle}" Background="#FFF9FCFD">
+        <StackPanel>
+         <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.Settings]}"/>
+         <TextBlock Margin="0,10,0,0" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding MonitoringStatus}"/>
+         <TextBlock Margin="0,10,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding Strings[Hint.SettingsApplyNextLaunch]}"/>
+         <StackPanel Margin="0,14,0,0" Width="260" HorizontalAlignment="Left">
+          <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.MonitoringInterval]}"/>
+          <ComboBox ItemsSource="{Binding MonitoringIntervalOptions}" DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding MonitoringIntervalSeconds, Mode=TwoWay}"/>
+          <TextBlock Margin="0,8,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding Strings[Hint.MonitoringInterval]}"/>
+         </StackPanel>
+         <WrapPanel Margin="0,14,0,0">
+          <StackPanel Margin="0,0,18,10">
+           <primitives:ToggleButton Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding IsMonitoringRunning, Mode=OneWay}" Command="{Binding ToggleMonitoringCommand}" IsEnabled="{Binding CanToggleMonitoring}"/>
+           <TextBlock Width="160" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" Text="{Binding MonitoringToggleButtonText}"/>
+          </StackPanel>
+          <Button Content="{Binding Strings[Button.Rollback]}" Command="{Binding RestoreCommand}" Background="#FF8A3B49"/>
+         </WrapPanel>
+         <Border Margin="0,12,0,0" Padding="14" Background="#FFFFFFFF" BorderBrush="#FFE1EAF7" BorderThickness="1" CornerRadius="16">
+          <Grid>
+           <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="130"/></Grid.ColumnDefinitions>
+           <primitives:ToggleButton Grid.Column="0" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding LanguageTransitionAnimationEnabled, Mode=TwoWay}"/>
+           <StackPanel Grid.Column="1" Margin="8,0,18,0">
+            <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.LanguageAnimationSettings]}"/>
+            <TextBlock Margin="0,6,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding Strings[Hint.LanguageTransitionAnimationEnabled]}"/>
+           </StackPanel>
+           <StackPanel Grid.Column="2">
+            <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Hint.LanguageTransitionDurationSeconds]}"/>
+            <TextBox Width="110" Text="{Binding LanguageTransitionDurationSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Delay=150, ValidatesOnExceptions=True}"/>
+           </StackPanel>
+          </Grid>
+         </Border>
+        </StackPanel>
+       </Border>
+       <UniformGrid Grid.Row="1" Columns="2" Margin="0,0,0,20">
+        <Border Margin="0,0,14,0" Style="{StaticResource CardStyle}" Background="#FFF7FAFB">
+         <StackPanel>
+          <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.SafetySettings]}"/>
+          <DockPanel Margin="0,12,0,0"><primitives:ToggleButton DockPanel.Dock="Left" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding PauseSchedulingAfterUnsafeExit, Mode=TwoWay}"/><TextBlock VerticalAlignment="Center" TextWrapping="Wrap" Text="{Binding Strings[Hint.PauseSchedulingAfterUnsafeExit]}"/></DockPanel>
+          <DockPanel Margin="0,10,0,0"><primitives:ToggleButton DockPanel.Dock="Left" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding AutoRollbackOnUnsafeExit, Mode=TwoWay}"/><TextBlock VerticalAlignment="Center" TextWrapping="Wrap" Text="{Binding Strings[Hint.AutoRollbackOnUnsafeExit]}"/></DockPanel>
+          <DockPanel Margin="0,10,0,0"><primitives:ToggleButton DockPanel.Dock="Left" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding DisableProfileAfterRepeatedUnsafeRuns, Mode=TwoWay}"/><TextBlock VerticalAlignment="Center" TextWrapping="Wrap" Text="{Binding Strings[Hint.DisableProfileAfterRepeatedUnsafeRuns]}"/></DockPanel>
+          <StackPanel Margin="0,14,0,0">
+           <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Hint.UnsafeRunThreshold]}"/>
+           <TextBox Width="120" Text="{Binding UnsafeRunThreshold, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
+          </StackPanel>
+         </StackPanel>
+        </Border>
+        <Border Style="{StaticResource CardStyle}" Background="#FFF6FBFD">
+         <StackPanel>
+          <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.StartupSettings]}"/>
+          <DockPanel Margin="0,12,0,0"><primitives:ToggleButton DockPanel.Dock="Left" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding LaunchAtStartup, Mode=TwoWay}"/><TextBlock VerticalAlignment="Center" TextWrapping="Wrap" Text="{Binding Strings[Hint.LaunchAtStartup]}"/></DockPanel>
+          <DockPanel Margin="0,10,0,0"><primitives:ToggleButton DockPanel.Dock="Left" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding AutoStartMonitoringOnLaunch, Mode=TwoWay}"/><TextBlock VerticalAlignment="Center" TextWrapping="Wrap" Text="{Binding Strings[Hint.AutoStartMonitoringOnLaunch]}"/></DockPanel>
+          <TextBlock Margin="0,14,0,0" FontSize="13" TextWrapping="Wrap" Text="{Binding StorageSummary}"/>
+         </StackPanel>
+        </Border>
+       </UniformGrid>
+       <Border Grid.Row="2" Style="{StaticResource CardStyle}" Background="#FFF8FBFD">
+        <StackPanel>
+         <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.DataLocations]}"/>
+         <TextBlock Margin="0,10,0,0" FontSize="13" TextWrapping="Wrap" FontFamily="Consolas" Text="{Binding DataLocationSummary}"/>
+         <WrapPanel Margin="0,14,0,0">
+         <Button Content="{Binding Strings[Button.OpenProfilesDirectory]}" Command="{Binding OpenProfilesDirectoryCommand}" Background="#FF1E8FA3"/>
+          <Button Content="{Binding Strings[Button.OpenDeviceStrategiesDirectory]}" Command="{Binding OpenDeviceStrategiesDirectoryCommand}" Background="#FF2E9AAE"/>
+          <Button Content="{Binding Strings[Button.OpenRuntimeDirectory]}" Command="{Binding OpenRuntimeDirectoryCommand}" Background="#FF4E7080"/>
+          <Button Content="{Binding Strings[Button.OpenLogsDirectory]}" Command="{Binding OpenLogsDirectoryCommand}" Background="#FF6A86B7"/>
+          <Button Content="{Binding Strings[Button.OpenApplicationDirectory]}" Command="{Binding OpenApplicationDirectoryCommand}" Background="#FF9B6A18"/>
+         </WrapPanel>
+        </StackPanel>
+       </Border>
+       <Border Grid.Row="3" Style="{StaticResource CardStyle}" Background="#FFFCFDFC">
+        <StackPanel>
+         <Grid>
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+          <StackPanel>
+           <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.StatusCenter]}"/>
+           <TextBlock Margin="0,10,0,0" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding StatusCenterSummary}"/>
+           <TextBlock Margin="0,10,0,0" FontSize="13" TextWrapping="Wrap" Text="{Binding MonitoringStatus}"/>
+          </StackPanel>
+          <Button Grid.Column="1" Content="{Binding Strings[Button.ClearStatusCenter]}" Command="{Binding ClearStatusCenterCommand}" Background="#FF4E7080"/>
+         </Grid>
+         <ListBox Margin="0,16,0,0" Height="260" ItemsSource="{Binding StatusCenterItems}">
+          <ListBox.ItemTemplate>
+           <DataTemplate DataType="{x:Type viewModels:StatusCenterItemViewModel}">
+            <Border Margin="0,0,0,10" Padding="12" Background="#FFF8FAFB" BorderBrush="#FFE3E8EC" BorderThickness="1" CornerRadius="12">
+             <Grid>
+              <Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="130"/><ColumnDefinition Width="120"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+              <TextBlock FontFamily="Consolas" Text="{Binding Timestamp, StringFormat={}{0:MM-dd HH:mm:ss}}"/>
+              <TextBlock Grid.Column="1" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Source}"/>
+              <Border Grid.Column="2" Padding="8,2" HorizontalAlignment="Left" CornerRadius="999">
+               <Border.Style>
+                <Style TargetType="Border">
+                 <Setter Property="Background" Value="#FFE8F0F4"/>
+                 <Style.Triggers>
+                  <DataTrigger Binding="{Binding LevelKey}" Value="Success"><Setter Property="Background" Value="#FFE4F5E8"/></DataTrigger>
+                  <DataTrigger Binding="{Binding LevelKey}" Value="Warning"><Setter Property="Background" Value="#FFFFF1D9"/></DataTrigger>
+                  <DataTrigger Binding="{Binding LevelKey}" Value="Error"><Setter Property="Background" Value="#FFFBE1E4"/></DataTrigger>
+                 </Style.Triggers>
+                </Style>
+               </Border.Style>
+               <TextBlock FontWeight="SemiBold" Text="{Binding Level}"/>
+              </Border>
+              <TextBlock Grid.Column="3" TextWrapping="Wrap" Text="{Binding Message}"/>
+             </Grid>
+            </Border>
+           </DataTemplate>
+          </ListBox.ItemTemplate>
+         </ListBox>
+        </StackPanel>
+       </Border>
+      </Grid>
+     </ScrollViewer>
+    </TabItem>
+   </TabControl>
+  </Border>
+ </Grid>
+</Window>

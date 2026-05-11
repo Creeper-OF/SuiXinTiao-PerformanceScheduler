@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "id": "browser-balanced",
+  "name": "Browser Balanced",
+  "version": 1,
+  "isEnabled": true,
+  "powerSourceMode": "Any",
+  "targetClassification": "Browser",
+  "match": {
+    "executableNames": [
+      "chrome.exe",
+      "msedge.exe",
+      "firefox.exe"
+    ],
+    "processNames": [
+      "chrome",
+      "msedge",
+      "firefox"
+    ],
+    "windowTitleContains": [
+      "Chrome",
+      "Edge",
+      "Firefox"
+    ],
+    "classifications": [
+      "Browser"
+    ]
+  },
+  "powerPlan": {
+    "schemeGuid": "381b4222-f694-41f0-9685-ff5bb260df2e",
+    "preferredPlanName": "Balanced",
+    "restoreOnExit": true
+  },
+  "priority": {
+    "foregroundPriority": "AboveNormal",
+    "lowerBackgroundProcesses": false,
+    "preferEfficiencyModeForBackground": false
+  },
+  "gpu": {
+    "mode": "DriverDefault",
+    "allowVendorApi": false
+  },
+  "backgroundPolicies": [],
+  "notes": "Balanced browsing and streaming preset."
+}
