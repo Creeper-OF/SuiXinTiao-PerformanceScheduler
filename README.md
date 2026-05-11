@@ -8,8 +8,14 @@
 
 - [项目总规划](docs/project-plan.md)：产品目标、架构原则、风险清单和阶段路线图。
 - [安全基座](docs/safety-baseline.md)：调度事务、回滚状态和进程优先级保护规则。
+- [公开仓库维护清单](docs/open-source-checklist.md)：公开提交前的隐私、构建产物和文档同步检查。
 - [文档索引](docs/README.md)：文档维护规则与入口。
 - [功能结构](docs/功能结构.md)：当前桌面端的用户任务结构。
+
+## 参与项目
+
+- [贡献指南](CONTRIBUTING.md)：代码分层、开发流程、测试和文档同步规则。
+- [安全策略](SECURITY.md)：安全问题、状态污染和隐私风险的报告方式。
 
 ## 项目状态
 
@@ -84,9 +90,9 @@ dotnet run --project .\src\PerformanceScheduler.App\PerformanceScheduler.App.csp
 dotnet test .\tests\PerformanceScheduler.Tests\PerformanceScheduler.Tests.csproj
 ```
 
-## 开源前不要上传的内容
+## 公开仓库维护
 
-以下内容属于本机运行数据、构建产物或个人配置，不建议上传到公开仓库。这些目录通常会在别人启动、构建或运行软件时自动重新生成。
+随芯调已经是公开仓库，提交前请确认不包含本机运行数据、构建产物或个人配置。这些目录通常会在别人启动、构建或运行软件时自动重新生成。
 
 - `bin/`、`obj/`、`artifacts/`、`publish/` 等构建输出。
 - `runtime/`、`logs/`、`appearance/` 等运行期目录。
@@ -94,7 +100,9 @@ dotnet test .\tests\PerformanceScheduler.Tests\PerformanceScheduler.Tests.csproj
 - `.env`、证书、密钥、发布配置、个人截图或包含设备隐私的信息。
 - 用户自己导出的迁移包、带个人硬件信息的配置包，除非已经确认可以公开。
 
-通常可以上传：`src/`、`tests/`、`profiles/` 中的示例配置、`community/` 中的示例目录、`locales/`、`docs/`、解决方案文件、README 和许可证文件。
+通常可以上传：`src/`、`tests/`、`profiles/` 中的示例配置、`community/` 中的示例目录、`locales/`、`docs/`、解决方案文件、README、贡献说明、安全说明和许可证文件。
+
+更完整的检查项见 [公开仓库维护清单](docs/open-source-checklist.md)。
 
 ## 安全说明
 

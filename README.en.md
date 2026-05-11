@@ -64,6 +64,12 @@ docs/                                   # Design notes
 - [Safety Baseline](docs/safety-baseline.md)
 - [Documentation Index](docs/README.md)
 
+## Contributing
+
+- [Contribution Guide](CONTRIBUTING.md)
+- [Security Policy](SECURITY.md)
+- [Open Source Checklist](docs/open-source-checklist.md)
+
 ## Requirements
 
 - Windows 10 / Windows 11
