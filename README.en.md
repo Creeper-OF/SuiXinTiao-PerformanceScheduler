@@ -89,17 +89,9 @@ Run tests:
 dotnet test .\tests\PerformanceScheduler.Tests\PerformanceScheduler.Tests.csproj
 ```
 
-## Do Not Commit
+## Development Notes
 
-Do not upload local runtime data, build outputs, or private machine data to a public repository. These files are normally generated again when another developer builds or runs the app.
-
-- `bin/`, `obj/`, `artifacts/`, `publish/`.
-- `runtime/`, `logs/`, `appearance/`.
-- `*.db`, `*.sqlite`, `*.sqlite3`, `*.log`, `*.dmp`.
-- `.env`, certificates, secrets, publishing profiles, private screenshots, or machine-identifying data.
-- Personal migration packages or hardware-specific bundles unless intentionally sanitized.
-
-Source code, tests, sample profiles, sample community catalogs, localization files, docs, solution files, README files, and a license file are normally safe to publish.
+This repository keeps source code, sample profiles, localization files, and design docs. Build outputs, runtime logs, local databases, export packages, and private device data should stay out of commits. See [Contribution Guide](CONTRIBUTING.md) and [Open Source Checklist](docs/open-source-checklist.md) for the full project conventions.
 
 ## Safety
 

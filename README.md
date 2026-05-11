@@ -90,19 +90,9 @@ dotnet run --project .\src\PerformanceScheduler.App\PerformanceScheduler.App.csp
 dotnet test .\tests\PerformanceScheduler.Tests\PerformanceScheduler.Tests.csproj
 ```
 
-## 公开仓库维护
+## 开发提示
 
-随芯调已经是公开仓库，提交前请确认不包含本机运行数据、构建产物或个人配置。这些目录通常会在别人启动、构建或运行软件时自动重新生成。
-
-- `bin/`、`obj/`、`artifacts/`、`publish/` 等构建输出。
-- `runtime/`、`logs/`、`appearance/` 等运行期目录。
-- `*.db`、`*.sqlite`、`*.sqlite3`、`*.log`、`*.dmp` 等数据库、日志和崩溃转储。
-- `.env`、证书、密钥、发布配置、个人截图或包含设备隐私的信息。
-- 用户自己导出的迁移包、带个人硬件信息的配置包，除非已经确认可以公开。
-
-通常可以上传：`src/`、`tests/`、`profiles/` 中的示例配置、`community/` 中的示例目录、`locales/`、`docs/`、解决方案文件、README、贡献说明、安全说明和许可证文件。
-
-更完整的检查项见 [公开仓库维护清单](docs/open-source-checklist.md)。
+本仓库只保留源码、示例配置、语言包和设计文档。构建产物、运行日志、本机数据库、导出包和包含设备隐私的信息不应提交。更完整的协作约定见 [贡献指南](CONTRIBUTING.md) 和 [公开仓库维护清单](docs/open-source-checklist.md)。
 
 ## 安全说明
 
