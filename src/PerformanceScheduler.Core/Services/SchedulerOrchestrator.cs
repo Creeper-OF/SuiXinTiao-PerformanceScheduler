@@ -98,23 +98,39 @@ public sealed class SchedulerOrchestrator
         {
             var originalPriorities = new Dictionary<int, PriorityLevel>();
             var originalForegroundPriority = await _priorityManager.TryGetPriorityAsync(app.ProcessId, cancellationToken);
-            if (originalForegroundPriority is { } foregroundPriority)
+            if (originalForegroundPriority is { } foregroundPriority &&
+                foregroundPriority != match.Profile.Priority.ForegroundPriority)
             {
                 originalPriorities[app.ProcessId] = foregroundPriority;
             }
 
-            activePowerPlan = await ApplyPowerPlanAsync(match, activePowerPlan, cancellationToken);
-            previousAdvancedPowerSettings = await ApplyAdvancedPowerSettingsAsync(match, activePowerPlan, powerSourceMode, cancellationToken);
-            priorityResult = await _priorityManager.ApplyForegroundBoostAsync(app, match.Profile, cancellationToken);
-            backgroundAdjustments = await _priorityManager.ApplyBackgroundPoliciesAsync(app, match.Profile, cancellationToken);
-            CaptureAdjustedBackgroundPriorities(originalPriorities, backgroundAdjustments);
+            var targetAdvancedPowerSourceMode = ResolveAdvancedPowerSourceMode(match.Profile, powerSourceMode);
+            var advancedPowerPlanScheme = match.Profile.PowerPlan.SchemeGuid ?? activePowerPlan?.SchemeGuid;
+            previousAdvancedPowerSettings = await CaptureAdvancedPowerSettingsAsync(
+                match,
+                advancedPowerPlanScheme,
+                targetAdvancedPowerSourceMode,
+                cancellationToken);
+            var backgroundBaselines = await _priorityManager.CaptureBackgroundPolicyBaselinesAsync(
+                app,
+                match.Profile,
+                cancellationToken);
+            foreach (var baseline in backgroundBaselines)
+            {
+                originalPriorities.TryAdd(baseline.ProcessId, baseline.PreviousPriority);
+            }
+
             await CaptureRollbackStateAsync(
                 match,
                 previousPowerPlan,
                 previousAdvancedPowerSettings,
                 originalPriorities,
-                backgroundAdjustments,
                 cancellationToken);
+
+            activePowerPlan = await ApplyPowerPlanAsync(match, activePowerPlan, cancellationToken);
+            await ApplyAdvancedPowerSettingsAsync(match, activePowerPlan, targetAdvancedPowerSourceMode, cancellationToken);
+            priorityResult = await _priorityManager.ApplyForegroundBoostAsync(app, match.Profile, cancellationToken);
+            backgroundAdjustments = await _priorityManager.ApplyBackgroundPoliciesAsync(app, match.Profile, cancellationToken);
 
             foreach (var adjustment in backgroundAdjustments.Where(result => result.Status == SchedulerActionStatus.Applied))
             {
@@ -173,28 +189,39 @@ public sealed class SchedulerOrchestrator
         return activePowerPlan;
     }
 
-    private async Task<PowerPlanAdvancedState?> ApplyAdvancedPowerSettingsAsync(
+    private async Task<PowerPlanAdvancedState?> CaptureAdvancedPowerSettingsAsync(
         ProfileMatchResult match,
-        PowerPlanInfo? activePowerPlan,
-        PowerSourceMode currentPowerSourceMode,
+        Guid? schemeGuid,
+        PowerSourceMode targetPowerSourceMode,
         CancellationToken cancellationToken)
     {
-        if (!match.Profile.PowerPlan.Advanced.HasChanges || activePowerPlan is null)
+        if (!match.Profile.PowerPlan.Advanced.HasChanges || schemeGuid is not { } targetSchemeGuid)
         {
             return null;
         }
 
-        var targetPowerSourceMode = match.Profile.PowerSourceMode == PowerSourceMode.Any
-            ? currentPowerSourceMode
-            : match.Profile.PowerSourceMode;
         var previousAdvancedSettings = await _powerPlanManager.GetAdvancedSettingsAsync(
-            activePowerPlan.SchemeGuid,
+            targetSchemeGuid,
             targetPowerSourceMode,
             cancellationToken);
         if (previousAdvancedSettings is null)
         {
             _logger.Warn($"Advanced power settings skipped because the current values could not be captured for {targetPowerSourceMode}.");
             return null;
+        }
+
+        return previousAdvancedSettings;
+    }
+
+    private async Task ApplyAdvancedPowerSettingsAsync(
+        ProfileMatchResult match,
+        PowerPlanInfo? activePowerPlan,
+        PowerSourceMode targetPowerSourceMode,
+        CancellationToken cancellationToken)
+    {
+        if (!match.Profile.PowerPlan.Advanced.HasChanges || activePowerPlan is null)
+        {
+            return;
         }
 
         var applied = await _powerPlanManager.ApplyAdvancedSettingsAsync(
@@ -206,11 +233,10 @@ public sealed class SchedulerOrchestrator
         if (applied)
         {
             _logger.Info($"Advanced power settings applied for {targetPowerSourceMode}.");
-            return previousAdvancedSettings;
+            return;
         }
 
         _logger.Warn($"Advanced power settings failed for {targetPowerSourceMode}.");
-        return null;
     }
 
     private async Task CaptureRollbackStateAsync(
@@ -218,13 +244,11 @@ public sealed class SchedulerOrchestrator
         PowerPlanInfo? previousPowerPlan,
         PowerPlanAdvancedState? previousAdvancedPowerSettings,
         IReadOnlyDictionary<int, PriorityLevel> originalPriorities,
-        IReadOnlyList<BackgroundProcessAdjustmentResult> backgroundAdjustments,
         CancellationToken cancellationToken)
     {
         var shouldCaptureState = match.Profile.PowerPlan.RestoreOnExit ||
                                  previousAdvancedPowerSettings is not null ||
-                                 match.Profile.Priority.ForegroundPriority != PriorityLevel.Normal ||
-                                 backgroundAdjustments.Any(result => result.Status == SchedulerActionStatus.Applied);
+                                 originalPriorities.Count > 0;
 
         if (!shouldCaptureState)
         {
@@ -239,20 +263,12 @@ public sealed class SchedulerOrchestrator
         }, cancellationToken);
     }
 
-    private static void CaptureAdjustedBackgroundPriorities(
-        IDictionary<int, PriorityLevel> originalPriorities,
-        IEnumerable<BackgroundProcessAdjustmentResult> backgroundAdjustments)
-    {
-        foreach (var adjustment in backgroundAdjustments)
-        {
-            if (adjustment.Status != SchedulerActionStatus.Applied || adjustment.PreviousPriority is not { } previousPriority)
-            {
-                continue;
-            }
-
-            originalPriorities.TryAdd(adjustment.ProcessId, previousPriority);
-        }
-    }
+    private static PowerSourceMode ResolveAdvancedPowerSourceMode(
+        PerformanceProfile profile,
+        PowerSourceMode currentPowerSourceMode) =>
+        profile.PowerSourceMode == PowerSourceMode.Any
+            ? currentPowerSourceMode
+            : profile.PowerSourceMode;
 
     private static string BuildSummary(
         FocusedAppContext app,

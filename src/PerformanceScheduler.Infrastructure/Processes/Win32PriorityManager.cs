@@ -27,6 +27,12 @@ public sealed class Win32PriorityManager : IPriorityManager
         try
         {
             using var process = Process.GetProcessById(processId);
+            var safety = ProcessPrioritySafetyPolicy.Evaluate(process, priority);
+            if (!safety.IsAllowed)
+            {
+                return Task.FromResult(false);
+            }
+
             process.PriorityClass = MapPriority(priority);
             return Task.FromResult(true);
         }
@@ -43,6 +49,31 @@ public sealed class Win32PriorityManager : IPriorityManager
     {
         var previousPriority = await TryGetPriorityAsync(app.ProcessId, cancellationToken);
         var requestedPriority = profile.Priority.ForegroundPriority;
+        var safety = ProcessPrioritySafetyPolicy.Evaluate(app, requestedPriority);
+        if (!safety.IsAllowed)
+        {
+            return new PriorityAdjustmentResult
+            {
+                ProcessId = app.ProcessId,
+                PreviousPriority = previousPriority,
+                AppliedPriority = previousPriority,
+                Status = SchedulerActionStatus.Unsupported,
+                Message = safety.Reason
+            };
+        }
+
+        if (previousPriority == requestedPriority)
+        {
+            return new PriorityAdjustmentResult
+            {
+                ProcessId = app.ProcessId,
+                PreviousPriority = previousPriority,
+                AppliedPriority = previousPriority,
+                Status = SchedulerActionStatus.Skipped,
+                Message = $"Priority already {requestedPriority}."
+            };
+        }
+
         var success = await SetPriorityAsync(app.ProcessId, requestedPriority, cancellationToken);
 
         return new PriorityAdjustmentResult
@@ -55,6 +86,67 @@ public sealed class Win32PriorityManager : IPriorityManager
                 ? $"Priority set to {requestedPriority}."
                 : "Priority change failed or was not permitted."
         };
+    }
+
+    public Task<IReadOnlyList<BackgroundProcessPriorityBaseline>> CaptureBackgroundPolicyBaselinesAsync(
+        FocusedAppContext foregroundApp,
+        PerformanceProfile profile,
+        CancellationToken cancellationToken = default)
+    {
+        if (!profile.Priority.LowerBackgroundProcesses || profile.BackgroundPolicies.Count == 0)
+        {
+            return Task.FromResult<IReadOnlyList<BackgroundProcessPriorityBaseline>>(Array.Empty<BackgroundProcessPriorityBaseline>());
+        }
+
+        var baselines = new List<BackgroundProcessPriorityBaseline>();
+        foreach (var process in Process.GetProcesses())
+        {
+            using (process)
+            {
+                if (process.Id == foregroundApp.ProcessId || process.Id == Environment.ProcessId)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    var processName = process.ProcessName;
+                    var executablePath = TryReadExecutablePath(process);
+                    var classification = ProcessClassificationHelper.Classify(processName, executablePath, process.MainWindowTitle);
+                    var policy = _backgroundPolicySelector.Select(classification, profile.BackgroundPolicies);
+                    if (policy is null)
+                    {
+                        continue;
+                    }
+
+                    var safety = ProcessPrioritySafetyPolicy.Evaluate(process, policy.TargetPriority);
+                    if (!safety.IsAllowed)
+                    {
+                        continue;
+                    }
+
+                    var previousPriority = MapPriority(process.PriorityClass);
+                    if (previousPriority == policy.TargetPriority)
+                    {
+                        continue;
+                    }
+
+                    baselines.Add(new BackgroundProcessPriorityBaseline
+                    {
+                        ProcessId = process.Id,
+                        ProcessName = processName,
+                        Category = classification.ToString(),
+                        PreviousPriority = previousPriority,
+                        TargetPriority = policy.TargetPriority
+                    });
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        return Task.FromResult<IReadOnlyList<BackgroundProcessPriorityBaseline>>(baselines);
     }
 
     public Task<IReadOnlyList<BackgroundProcessAdjustmentResult>> ApplyBackgroundPoliciesAsync(
@@ -85,6 +177,20 @@ public sealed class Win32PriorityManager : IPriorityManager
                     var policy = _backgroundPolicySelector.Select(classification, profile.BackgroundPolicies);
                     if (policy is null)
                     {
+                        continue;
+                    }
+
+                    var safety = ProcessPrioritySafetyPolicy.Evaluate(process, policy.TargetPriority);
+                    if (!safety.IsAllowed)
+                    {
+                        adjustments.Add(new BackgroundProcessAdjustmentResult
+                        {
+                            ProcessId = process.Id,
+                            ProcessName = processName,
+                            Category = classification.ToString(),
+                            Status = SchedulerActionStatus.Unsupported,
+                            Message = safety.Reason
+                        });
                         continue;
                     }
 

@@ -32,8 +32,7 @@ public sealed class FileRollbackManager : IRollbackManager
 
     public async Task CaptureAsync(SchedulerState state, CancellationToken cancellationToken = default)
     {
-        await using var stream = File.Create(_stateFilePath);
-        await JsonSerializer.SerializeAsync(stream, state, _jsonOptions, cancellationToken);
+        await SaveStateAsync(state, cancellationToken);
     }
 
     public async Task<SchedulerState?> GetLastKnownStateAsync(CancellationToken cancellationToken = default)
@@ -68,11 +67,21 @@ public sealed class FileRollbackManager : IRollbackManager
             return;
         }
 
+        var remainingState = state;
+
         if (state.PreviousPowerPlan is not null)
         {
             try
             {
-                await _powerPlanManager.SetActivePlanAsync(state.PreviousPowerPlan.SchemeGuid, cancellationToken);
+                var restored = await _powerPlanManager.SetActivePlanAsync(state.PreviousPowerPlan.SchemeGuid, cancellationToken);
+                if (restored)
+                {
+                    remainingState = remainingState with { PreviousPowerPlan = null };
+                }
+                else
+                {
+                    _logger.Warn($"Failed to restore power plan {state.PreviousPowerPlan.Name}: powercfg did not accept the change.");
+                }
             }
             catch (OperationCanceledException)
             {
@@ -88,7 +97,15 @@ public sealed class FileRollbackManager : IRollbackManager
         {
             try
             {
-                await _powerPlanManager.RestoreAdvancedSettingsAsync(state.PreviousAdvancedPowerSettings, cancellationToken);
+                var restored = await _powerPlanManager.RestoreAdvancedSettingsAsync(state.PreviousAdvancedPowerSettings, cancellationToken);
+                if (restored)
+                {
+                    remainingState = remainingState with { PreviousAdvancedPowerSettings = null };
+                }
+                else
+                {
+                    _logger.Warn("Failed to restore advanced power settings: powercfg did not accept the change.");
+                }
             }
             catch (OperationCanceledException)
             {
@@ -100,11 +117,20 @@ public sealed class FileRollbackManager : IRollbackManager
             }
         }
 
+        var remainingPriorities = new Dictionary<int, PriorityLevel>(state.OriginalPriorities);
         foreach (var (processId, priority) in state.OriginalPriorities)
         {
             try
             {
-                await _priorityManager.SetPriorityAsync(processId, priority, cancellationToken);
+                var restored = await _priorityManager.SetPriorityAsync(processId, priority, cancellationToken);
+                if (restored)
+                {
+                    remainingPriorities.Remove(processId);
+                }
+                else
+                {
+                    _logger.Warn($"Failed to restore priority for PID {processId}: priority change was not permitted.");
+                }
             }
             catch (OperationCanceledException)
             {
@@ -116,6 +142,57 @@ public sealed class FileRollbackManager : IRollbackManager
             }
         }
 
-        File.Delete(_stateFilePath);
+        remainingState = remainingState with { OriginalPriorities = remainingPriorities };
+        if (IsEmpty(remainingState))
+        {
+            DeleteStateFile();
+            return;
+        }
+
+        await SaveStateAsync(remainingState, cancellationToken);
+        _logger.Warn("Rollback completed with unresolved item(s); remaining state was preserved.");
     }
+
+    private async Task SaveStateAsync(SchedulerState state, CancellationToken cancellationToken)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(_stateFilePath)!);
+        var temporaryPath = $"{_stateFilePath}.{Guid.NewGuid():N}.tmp";
+
+        try
+        {
+            await using (var stream = new FileStream(
+                temporaryPath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 4096,
+                FileOptions.WriteThrough))
+            {
+                await JsonSerializer.SerializeAsync(stream, state, _jsonOptions, cancellationToken);
+                await stream.FlushAsync(cancellationToken);
+            }
+
+            File.Move(temporaryPath, _stateFilePath, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+            {
+                File.Delete(temporaryPath);
+            }
+        }
+    }
+
+    private void DeleteStateFile()
+    {
+        if (File.Exists(_stateFilePath))
+        {
+            File.Delete(_stateFilePath);
+        }
+    }
+
+    private static bool IsEmpty(SchedulerState state) =>
+        state.PreviousPowerPlan is null &&
+        state.PreviousAdvancedPowerSettings is null &&
+        state.OriginalPriorities.Count == 0;
 }

@@ -69,6 +69,32 @@ public sealed class FileRollbackManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task RollbackAsync_PreservesUnresolvedStateWhenPriorityRestoreFails()
+    {
+        var powerPlanManager = new FakePowerPlanManager();
+        var priorityManager = new FakePriorityManager(failingProcessId: 10);
+        var logger = new TestLogger();
+        var manager = new FileRollbackManager(_statePath, powerPlanManager, priorityManager, logger);
+
+        await manager.CaptureAsync(new SchedulerState
+        {
+            OriginalPriorities = new Dictionary<int, PriorityLevel>
+            {
+                [10] = PriorityLevel.Normal,
+                [20] = PriorityLevel.BelowNormal
+            }
+        });
+
+        await manager.RollbackAsync();
+
+        var remainingState = await manager.GetLastKnownStateAsync();
+        Assert.NotNull(remainingState);
+        Assert.True(remainingState.OriginalPriorities.ContainsKey(10));
+        Assert.False(remainingState.OriginalPriorities.ContainsKey(20));
+        Assert.Contains(logger.Messages, message => message.Contains("remaining state was preserved", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task RollbackAsync_IgnoresCorruptRollbackState()
     {
         await File.WriteAllTextAsync(_statePath, "{ this is not valid json");
@@ -155,6 +181,12 @@ public sealed class FileRollbackManagerTests : IDisposable
             PerformanceProfile profile,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new PriorityAdjustmentResult());
+
+        public Task<IReadOnlyList<BackgroundProcessPriorityBaseline>> CaptureBackgroundPolicyBaselinesAsync(
+            FocusedAppContext foregroundApp,
+            PerformanceProfile profile,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<BackgroundProcessPriorityBaseline>>(Array.Empty<BackgroundProcessPriorityBaseline>());
 
         public Task<IReadOnlyList<BackgroundProcessAdjustmentResult>> ApplyBackgroundPoliciesAsync(
             FocusedAppContext foregroundApp,

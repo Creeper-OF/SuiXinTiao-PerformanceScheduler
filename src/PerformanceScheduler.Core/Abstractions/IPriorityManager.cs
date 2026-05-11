@@ -13,6 +13,11 @@ public interface IPriorityManager
         PerformanceProfile profile,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<BackgroundProcessPriorityBaseline>> CaptureBackgroundPolicyBaselinesAsync(
+        FocusedAppContext foregroundApp,
+        PerformanceProfile profile,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<BackgroundProcessAdjustmentResult>> ApplyBackgroundPoliciesAsync(
         FocusedAppContext foregroundApp,
         PerformanceProfile profile,

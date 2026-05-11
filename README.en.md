@@ -93,6 +93,8 @@ Source code, tests, sample profiles, sample community catalogs, localization fil
 
 SuiXinTiao can adjust power plans and process priorities, so rollback, explainability, and disable switches are first-class requirements. Unsupported capabilities should be clearly disabled or marked as unavailable in the UI. GPU frequency, voltage, and vendor-specific behavior should be added only as device-gated extensions.
 
+See [Safety Baseline](docs/safety-baseline.md) for the current rollback and process-priority guardrails.
+
 ## License
 
 This project is licensed under the Apache License 2.0.
