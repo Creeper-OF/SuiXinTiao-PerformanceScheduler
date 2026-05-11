@@ -1,60 +1,60 @@
-# Safety Baseline
+# 安全基座
 
-SuiXinTiao may change Windows power plans and process priorities. Those actions are useful only when they are reversible, explainable, and bounded by conservative guardrails.
+随芯调会调整 Windows 电源方案和进程优先级。只要涉及系统状态修改，就必须满足三个条件：可回滚、可解释、受保护。
 
-This document describes the first safety baseline used by the scheduler.
+这份文档描述当前第一阶段安全基座。
 
-## Principles
+## 原则
 
-- Capture state before changing state.
-- Keep rollback state durable and atomic.
-- Preserve unresolved rollback items after partial failures.
-- Do not raise processes to `RealTime` priority.
-- Do not adjust protected Windows processes or the scheduler process itself.
-- Keep scheduling decisions in Core and platform-specific actions in Infrastructure.
+- 先捕获状态，再修改状态。
+- 回滚状态必须可靠、原子地写入磁盘。
+- 部分回滚失败时，不能丢弃未恢复项目。
+- 不把进程提升到 `RealTime` 优先级。
+- 不调整受保护的 Windows 关键进程，也不调整调度器自身。
+- 调度决策留在 Core，平台动作留在 Infrastructure。
 
-## Scheduling Transaction
+## 调度事务
 
-The scheduler follows this order when a profile matches the foreground app:
+当某个 Profile 命中当前前台应用时，调度器按以下顺序执行：
 
-1. Detect capabilities, foreground app, current power source, and active power plan.
-2. Match the app against enabled profiles.
-3. Capture the original foreground process priority when it would change.
-4. Capture original advanced power settings for the target power plan and power source.
-5. Capture original priorities for background processes that are eligible for policy changes.
-6. Persist rollback state.
-7. Apply the power plan, advanced power settings, foreground priority, and background policies.
-8. Record the run result for diagnostics.
+1. 检测能力、前台应用、当前供电状态和当前电源方案。
+2. 用已启用 Profile 匹配前台应用。
+3. 如果前台进程优先级将发生变化，先捕获原优先级。
+4. 捕获目标电源方案和目标供电状态下的高级电源设置原值。
+5. 捕获符合后台策略的后台进程原优先级。
+6. 持久化回滚状态。
+7. 执行电源方案、高级电源设置、前台优先级和后台策略动作。
+8. 记录调度结果，供诊断和 UI 展示。
 
-Dangerous actions should not be added outside this transaction path.
+新的危险动作不应绕过这条事务路径。
 
-## Rollback State
+## 回滚状态
 
-Rollback state is written with a temporary file and then moved into place. This keeps the previous rollback state intact if the process exits while writing.
+回滚状态先写入临时文件，再移动到目标路径。这样可以避免进程在写入中途退出时留下半截 JSON。
 
-When rollback is requested, each item is restored independently:
+执行回滚时，每个项目独立恢复：
 
-- Restored items are removed from the pending rollback state.
-- Failed items remain in the rollback state for a later retry.
-- The rollback file is deleted only when every captured item has been restored.
+- 恢复成功的项目会从待回滚状态中移除。
+- 恢复失败的项目会保留，供后续重试。
+- 只有全部捕获项目都恢复成功后，回滚文件才会删除。
 
-## Process Priority Safety
+## 进程优先级保护
 
-Priority changes go through a shared safety policy before execution. The baseline blocks:
+优先级调整执行前必须经过统一安全策略。当前基座默认阻止：
 
-- `RealTime` priority.
-- Windows system pseudo-processes.
-- The scheduler process.
-- Known protected Windows processes such as `csrss`, `lsass`, `services`, `wininit`, `winlogon`, `dwm`, and related core processes.
+- `RealTime` 优先级。
+- Windows 系统伪进程。
+- 随芯调自身进程。
+- 已知 Windows 关键进程，例如 `csrss`、`lsass`、`services`、`wininit`、`winlogon`、`dwm` 等。
 
-The scheduler reports blocked actions as unsupported instead of treating them as successful changes.
+被安全策略阻止的动作应记录为不支持，而不是伪装成执行成功。
 
-## Extension Rules
+## 扩展规则
 
-Future power, GPU, or background-limiting actions should follow the same pattern:
+后续新增电源、GPU 或后台限制动作时，必须沿用同一模式：
 
-1. Add a clear Core model for the baseline or action result.
-2. Capture the original state before applying the action.
-3. Persist rollback state before touching the system.
-4. Make the Infrastructure implementation reject unsafe targets by default.
-5. Add tests for successful rollback, partial rollback failure, and blocked unsafe requests.
+1. 在 Core 中增加清晰的 baseline 或 action result 模型。
+2. 执行动作前捕获原始状态。
+3. 修改系统前先持久化回滚状态。
+4. Infrastructure 默认拒绝不安全目标。
+5. 增加成功回滚、部分回滚失败、危险请求被阻止的测试。

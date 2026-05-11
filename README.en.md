@@ -58,6 +58,12 @@ locales/                                # Localization files
 docs/                                   # Design notes
 ```
 
+## Documentation
+
+- [Project Plan](docs/project-plan.md)
+- [Safety Baseline](docs/safety-baseline.md)
+- [Documentation Index](docs/README.md)
+
 ## Requirements
 
 - Windows 10 / Windows 11
