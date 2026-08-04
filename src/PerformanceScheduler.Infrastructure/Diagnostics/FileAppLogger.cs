@@ -36,16 +36,40 @@ public sealed class FileAppLogger : IAppLogger
         Write(AppLogLevel.Error, resolvedMessage);
     }
 
-    private void Write(AppLogLevel level, string message)
+    public void PublishUserEvent(
+        UserEventCode eventCode,
+        AppLogLevel level,
+        string technicalMessage,
+        params object[] arguments)
     {
-        var entry = new LogEntry(DateTimeOffset.Now, level, message);
+        if (eventCode == UserEventCode.None)
+        {
+            throw new ArgumentException("A user event must have a stable event code.", nameof(eventCode));
+        }
+
+        Write(
+            level,
+            technicalMessage,
+            LogAudience.User,
+            eventCode,
+            arguments.ToArray());
+    }
+
+    private void Write(
+        AppLogLevel level,
+        string message,
+        LogAudience audience = LogAudience.Developer,
+        UserEventCode eventCode = UserEventCode.None,
+        IReadOnlyList<object>? arguments = null)
+    {
+        var entry = new LogEntry(DateTimeOffset.Now, level, message, audience, eventCode, arguments);
         _entries.Enqueue(entry);
 
         while (_entries.Count > 500 && _entries.TryDequeue(out _))
         {
         }
 
-        var line = $"{entry.Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{level}] {message}{Environment.NewLine}";
+        var line = $"{entry.Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{level}] [{audience}] [{eventCode}] {message}{Environment.NewLine}";
         File.AppendAllText(_logFilePath, line, Encoding.UTF8);
         EntryWritten?.Invoke(this, entry);
     }

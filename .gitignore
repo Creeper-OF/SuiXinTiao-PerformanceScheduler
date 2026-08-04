@@ -503,3 +503,7 @@ appearance/
 exports/
 release/
 *.zip
+
+# Optional third-party PresentMon binaries are installed locally, not vendored.
+tools/PresentMon/*.exe
+tools/PresentMon/*.dll

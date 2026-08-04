@@ -8,6 +8,8 @@ using Microsoft.Win32;
 using PerformanceScheduler.App.Commands;
 using PerformanceScheduler.App.Localization;
 using PerformanceScheduler.App.Services;
+using PerformanceScheduler.App.Services.Diagnostics;
+using PerformanceScheduler.App.Services.Telemetry;
 using PerformanceScheduler.App.Settings;
 using PerformanceScheduler.App.Ui;
 using PerformanceScheduler.App.Views;
@@ -17,17 +19,21 @@ using PerformanceScheduler.Core.Services;
 
 namespace PerformanceScheduler.App.ViewModels;
 
-public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
+public sealed partial class MainWindowViewModel : ObservableObject, IAsyncDisposable
 {
     private readonly SchedulerOrchestrator _schedulerOrchestrator;
     private readonly IForegroundChangeNotifier _foregroundChangeNotifier;
     private readonly IDeviceFingerprintProvider _deviceFingerprintProvider;
     private readonly MigrationPackageService _migrationPackageService;
+    private readonly DiagnosticPackageService _diagnosticPackageService;
+    private readonly ForegroundTelemetryObservationService _telemetryObservationService;
+    private readonly PresentMonConfigurationService _presentMonConfigurationService;
     private readonly IProfileManager _profileManager;
     private readonly IDeviceStrategyPackageStore _deviceStrategyPackageStore;
     private readonly ICommunityProfileCatalog _communityProfileCatalog;
     private readonly ICommunityDeviceStrategyCatalog _communityDeviceStrategyCatalog;
     private readonly IPowerPlanManager _powerPlanManager;
+    private readonly IRuntimeStateStore _runtimeStateStore;
     private readonly DeviceCompatibilityEvaluator _deviceCompatibilityEvaluator = new();
     private readonly JsonLocalizationService _localizationService;
     private readonly IAppLogger _logger;
@@ -45,9 +51,11 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     private readonly string _communityCatalogPath;
     private readonly string _databasePath;
     private readonly CommunityProfileCatalogFilter _communityProfileCatalogFilter = new();
+    private readonly DeviceStrategyComposer _deviceStrategyComposer = new();
     private IReadOnlyList<CommunityProfileEntry> _allCommunityEntries = Array.Empty<CommunityProfileEntry>();
     private IReadOnlyList<CommunityDeviceStrategyEntry> _allCommunityDeviceStrategyEntries = Array.Empty<CommunityDeviceStrategyEntry>();
     private readonly List<StatusCenterEvent> _statusCenterEvents = new();
+    private readonly HashSet<string> _reportedConfigurationIssues = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
     private static readonly AppearanceThemeDefinition[] AppearanceThemes =
     [
@@ -64,6 +72,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     private bool _foregroundEventRefreshQueued;
     private DateTimeOffset _lastForegroundEventAt = DateTimeOffset.MinValue;
     private SchedulerRunResult? _lastRunResult;
+    private SchedulerRunHistoryItemViewModel? _selectedRuntimeHistory;
     private bool _isUpdatingLanguageSelection;
     private string _focusedAppName = string.Empty;
     private string _focusedAppDetails = string.Empty;
@@ -82,6 +91,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     private string _communityCatalogStatus = string.Empty;
     private string _communityFilterSummary = string.Empty;
     private string _statusCenterSummary = string.Empty;
+    private string _actionAuditSummary = string.Empty;
     private string _validationSummary = string.Empty;
     private string _gpuCapabilitySummary = string.Empty;
     private string _gpuAdapterSummary = string.Empty;
@@ -95,6 +105,9 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     private bool _launchAtStartup;
     private bool _languageTransitionAnimationEnabled = true;
     private double _languageTransitionDurationSeconds = 0.9;
+    private bool _uiMotionEnabled = true;
+    private bool _uiMotionStaggerEnabled = true;
+    private double _uiMotionDurationMilliseconds = 280;
     private bool _appearanceBackgroundImageEnabled;
     private string _selectedAppearanceBackgroundMode = "unified";
     private string _appearanceBackgroundImagePath = string.Empty;
@@ -119,6 +132,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     private bool _supportsGpuClockLimit;
     private bool _supportsGpuVoltageControl;
     private bool _supportsGpuVendorExtensions;
+    private bool _supportsEfficiencyModeHint;
     private string _monitoringStatusKey = "Status.MonitorIdle";
     private object[] _monitoringStatusArgs = Array.Empty<object>();
     private string _profileEditorStatusKey = "Status.ProfileLibraryReady";
@@ -130,6 +144,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     private ProfileListItemViewModel? _selectedProfile;
     private ProfileRevisionInfo? _selectedProfileRevision;
     private DeviceStrategyPackageListItemViewModel? _selectedDeviceStrategyPackage;
+    private DeviceStrategyProfileItemViewModel? _selectedDeviceStrategyProfile;
     private CommunityProfileListItemViewModel? _selectedCommunityProfile;
     private CommunityDeviceStrategyListItemViewModel? _selectedCommunityDeviceStrategy;
     private LanguageOptionViewModel? _selectedLanguage;
@@ -144,11 +159,15 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         IForegroundChangeNotifier foregroundChangeNotifier,
         IDeviceFingerprintProvider deviceFingerprintProvider,
         MigrationPackageService migrationPackageService,
+        DiagnosticPackageService diagnosticPackageService,
+        ForegroundTelemetryObservationService telemetryObservationService,
+        PresentMonConfigurationService presentMonConfigurationService,
         IProfileManager profileManager,
         IDeviceStrategyPackageStore deviceStrategyPackageStore,
         ICommunityProfileCatalog communityProfileCatalog,
         ICommunityDeviceStrategyCatalog communityDeviceStrategyCatalog,
         IPowerPlanManager powerPlanManager,
+        IRuntimeStateStore runtimeStateStore,
         JsonLocalizationService localizationService,
         IAppLogger logger,
         JsonAppSettingsStore settingsStore,
@@ -168,11 +187,15 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         _foregroundChangeNotifier = foregroundChangeNotifier;
         _deviceFingerprintProvider = deviceFingerprintProvider;
         _migrationPackageService = migrationPackageService;
+        _diagnosticPackageService = diagnosticPackageService;
+        _telemetryObservationService = telemetryObservationService;
+        _presentMonConfigurationService = presentMonConfigurationService;
         _profileManager = profileManager;
         _deviceStrategyPackageStore = deviceStrategyPackageStore;
         _communityProfileCatalog = communityProfileCatalog;
         _communityDeviceStrategyCatalog = communityDeviceStrategyCatalog;
         _powerPlanManager = powerPlanManager;
+        _runtimeStateStore = runtimeStateStore;
         _localizationService = localizationService;
         _logger = logger;
         _settingsStore = settingsStore;
@@ -204,8 +227,15 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         ExportProfilesCommand = new AsyncCommand(ExportProfilesAsync, onException: HandleCommandException);
         ImportMigrationPackageCommand = new AsyncCommand(ImportMigrationPackageAsync, onException: HandleCommandException);
         ExportMigrationPackageCommand = new AsyncCommand(ExportMigrationPackageAsync, onException: HandleCommandException);
+        ExportDiagnosticPackageCommand = new AsyncCommand(ExportDiagnosticPackageAsync, onException: HandleCommandException);
+        CaptureTelemetryObservationCommand = new AsyncCommand(CaptureTelemetryObservationAsync, onException: HandleCommandException);
+        ChoosePresentMonExecutableCommand = new RelayCommand(_ => ChoosePresentMonExecutable());
+        ClearPresentMonExecutableCommand = new RelayCommand(_ => ClearPresentMonExecutable());
         ImportCommunityProfileCommand = new AsyncCommand(ImportSelectedCommunityProfileAsync, onException: HandleCommandException);
         ImportCommunityDeviceStrategyCommand = new AsyncCommand(ImportSelectedCommunityDeviceStrategyAsync, onException: HandleCommandException);
+        CreateDeviceStrategyPackageCommand = new AsyncCommand(CreateDeviceStrategyPackageAsync, onException: HandleCommandException);
+        AddProfileToDeviceStrategyCommand = new AsyncCommand(AddSelectedProfileToDeviceStrategyAsync, onException: HandleCommandException);
+        RemoveProfileFromDeviceStrategyCommand = new AsyncCommand(RemoveSelectedProfileFromDeviceStrategyAsync, onException: HandleCommandException);
         RollbackProfileCommand = new AsyncCommand(RollbackProfileAsync, onException: HandleCommandException);
         ResumeSchedulingCommand = new RelayCommand(_ => ResumeScheduling(), _ => IsSchedulingSuspended);
         OpenProfilesDirectoryCommand = new RelayCommand(_ => OpenDirectory(_profilesDirectory));
@@ -245,13 +275,16 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
 
         RebuildLocalizedOptionCollections();
         SetSelectedLanguageByCode(_localizationService.CurrentLanguageCode);
-        ApplyAppearanceResources();
+        ApplyAppearanceResources(animate: false);
         ApplyDefaultRunState();
         ApplyMonitoringStatus();
         ApplyProfileEditorStatus();
         ApplyCommunityCatalogStatus();
         ApplyAppearanceStatus();
-        ApplyAppearanceResources();
+        ApplyDiagnosticPackageStatus();
+        ApplyTelemetryObservationSummary();
+        RebuildTelemetryHistoryLines();
+        RefreshPresentMonConfigurationStatus();
         RefreshStatusCenterItems();
         ApplyValidationSummary();
         RefreshStorageSummary();
@@ -267,17 +300,27 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
 
     public ObservableCollection<string> CapabilityLines { get; } = new();
 
-    public ObservableCollection<LogEntry> RecentLogs { get; } = new();
+    public ObservableCollection<LogEntryItemViewModel> RecentLogs { get; } = new();
+
+    public ObservableCollection<string> TelemetryObservationLines { get; } = new();
+
+    public ObservableCollection<string> TelemetryHistoryLines { get; } = new();
 
     public ObservableCollection<ProfileListItemViewModel> Profiles { get; } = new();
 
     public ObservableCollection<DeviceStrategyPackageListItemViewModel> DeviceStrategyPackages { get; } = new();
+
+    public ObservableCollection<DeviceStrategyProfileItemViewModel> SelectedDeviceStrategyProfiles { get; } = new();
 
     public ObservableCollection<CommunityProfileListItemViewModel> CommunityProfiles { get; } = new();
 
     public ObservableCollection<CommunityDeviceStrategyListItemViewModel> CommunityDeviceStrategies { get; } = new();
 
     public ObservableCollection<StatusCenterItemViewModel> StatusCenterItems { get; } = new();
+
+    public ObservableCollection<SchedulerActionItemViewModel> ActionAuditItems { get; } = new();
+
+    public ObservableCollection<SchedulerRunHistoryItemViewModel> RuntimeHistoryItems { get; } = new();
 
     public ObservableCollection<PowerPlanOptionViewModel> PowerPlanOptions { get; } = new();
 
@@ -335,9 +378,23 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
 
     public ICommand ExportMigrationPackageCommand { get; }
 
+    public ICommand ExportDiagnosticPackageCommand { get; }
+
+    public ICommand CaptureTelemetryObservationCommand { get; }
+
+    public ICommand ChoosePresentMonExecutableCommand { get; }
+
+    public ICommand ClearPresentMonExecutableCommand { get; }
+
     public ICommand ImportCommunityProfileCommand { get; }
 
     public ICommand ImportCommunityDeviceStrategyCommand { get; }
+
+    public ICommand CreateDeviceStrategyPackageCommand { get; }
+
+    public ICommand AddProfileToDeviceStrategyCommand { get; }
+
+    public ICommand RemoveProfileFromDeviceStrategyCommand { get; }
 
     public ICommand RollbackProfileCommand { get; }
 
@@ -430,9 +487,21 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         {
             if (SetProperty(ref _selectedDeviceStrategyPackage, value) && value is not null)
             {
+                RebuildSelectedDeviceStrategyProfiles(value.Package);
                 SetProfileEditorStatus("Status.SelectedDeviceStrategyPackage", value.Package.Name);
             }
+            else if (value is null)
+            {
+                SelectedDeviceStrategyProfiles.Clear();
+                SelectedDeviceStrategyProfile = null;
+            }
         }
+    }
+
+    public DeviceStrategyProfileItemViewModel? SelectedDeviceStrategyProfile
+    {
+        get => _selectedDeviceStrategyProfile;
+        set => SetProperty(ref _selectedDeviceStrategyProfile, value);
     }
 
     public CommunityProfileListItemViewModel? SelectedCommunityProfile
@@ -798,6 +867,80 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         }
     }
 
+    public string ActionAuditSummary
+    {
+        get => _actionAuditSummary;
+        private set => SetProperty(ref _actionAuditSummary, value);
+    }
+
+    public SchedulerRunHistoryItemViewModel? SelectedRuntimeHistory
+    {
+        get => _selectedRuntimeHistory;
+        set
+        {
+            if (!SetProperty(ref _selectedRuntimeHistory, value))
+            {
+                return;
+            }
+
+            if (value is null)
+            {
+                RefreshActionAudit(Array.Empty<SchedulerActionResult>());
+                RefreshRuntimeHistoryDetail(null);
+            }
+            else
+            {
+                RefreshActionAudit(value.Entry.Actions);
+                RefreshRuntimeHistoryDetail(value.Entry);
+            }
+        }
+    }
+
+    public bool UiMotionEnabled
+    {
+        get => _uiMotionEnabled;
+        set
+        {
+            if (SetProperty(ref _uiMotionEnabled, value))
+            {
+                OnPropertyChanged(nameof(UiStaggeredRevealEnabled));
+                _settingsStore.Update(settings => settings.UiMotionEnabled = value);
+                if (!value)
+                {
+                    ApplyAppearanceResources();
+                }
+            }
+        }
+    }
+
+    public bool UiMotionStaggerEnabled
+    {
+        get => _uiMotionStaggerEnabled;
+        set
+        {
+            if (SetProperty(ref _uiMotionStaggerEnabled, value))
+            {
+                OnPropertyChanged(nameof(UiStaggeredRevealEnabled));
+                _settingsStore.Update(settings => settings.UiMotionStaggerEnabled = value);
+            }
+        }
+    }
+
+    public bool UiStaggeredRevealEnabled => UiMotionEnabled && UiMotionStaggerEnabled;
+
+    public double UiMotionDurationMilliseconds
+    {
+        get => _uiMotionDurationMilliseconds;
+        set
+        {
+            var normalized = JsonAppSettingsStore.NormalizeUiMotionDuration(value);
+            if (SetProperty(ref _uiMotionDurationMilliseconds, normalized))
+            {
+                _settingsStore.Update(settings => settings.UiMotionDurationMilliseconds = normalized);
+            }
+        }
+    }
+
     public bool AppearanceBackgroundImageEnabled
     {
         get => _appearanceBackgroundImageEnabled;
@@ -1082,9 +1225,17 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         private set => SetProperty(ref _supportsGpuVendorExtensions, value);
     }
 
+    public bool SupportsEfficiencyModeHint
+    {
+        get => _supportsEfficiencyModeHint;
+        private set => SetProperty(ref _supportsEfficiencyModeHint, value);
+    }
+
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         ReloadRecentLogs();
+        await LoadRuntimeHistoryAsync(cancellationToken);
+        await LoadTelemetryHistoryAsync(cancellationToken);
         await LoadPowerPlansAsync(cancellationToken);
         await LoadLocalLibraryAsync(cancellationToken);
         await LoadCommunityProfilesAsync(cancellationToken);
@@ -1121,11 +1272,15 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             var result = await _schedulerOrchestrator.EvaluateForegroundAsync();
             if (_trackAppliedProfileAsync is not null)
             {
-                await _trackAppliedProfileAsync(result.MatchResult?.Profile, CancellationToken.None);
+                var trackedProfile = result.Success || result.FailureRecoveryCompleted == false
+                    ? result.MatchResult?.Profile
+                    : null;
+                await _trackAppliedProfileAsync(trackedProfile, CancellationToken.None);
             }
 
             _lastRunResult = result;
             UpdateFromResult(result);
+            AddRuntimeHistoryResult(result);
 
             if (announceResult)
             {
@@ -1292,540 +1447,12 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         await LoadPowerPlansAsync();
     }
 
-    private async Task LoadProfilesAsync()
-    {
-        await LoadProfilesAsync(CancellationToken.None);
-    }
-
-    private async Task LoadLocalLibraryAsync()
-    {
-        await LoadLocalLibraryAsync(CancellationToken.None);
-    }
-
-    private async Task LoadLocalLibraryAsync(CancellationToken cancellationToken)
-    {
-        await LoadProfilesAsync(cancellationToken);
-        await LoadDeviceStrategyPackagesAsync(cancellationToken);
-    }
-
-    private async Task LoadCommunityProfilesAsync()
-    {
-        await LoadCommunityProfilesAsync(CancellationToken.None);
-    }
-
-    private async Task LoadProfilesAsync(CancellationToken cancellationToken)
-    {
-        var profiles = await _profileManager.LoadProfilesAsync(cancellationToken);
-        var currentSelectedId = SelectedProfile?.Profile.Id;
-        RebuildProfileItems(profiles, currentSelectedId);
-
-        if (Profiles.Count == 0)
-        {
-            SelectedProfile = null;
-            ProfileDraft.Reset(PowerPlanOptions);
-            ApplyDefaultDraftName();
-            SetProfileEditorStatus("Status.NoSavedProfiles");
-            ApplyValidationIssues(ProfileDraft.GetValidationMessages());
-        }
-        else
-        {
-            SelectedProfile = Profiles.FirstOrDefault(item => item.Profile.Id == currentSelectedId) ?? Profiles[0];
-        }
-
-        RefreshStorageSummary();
-    }
-
-    private async Task LoadDeviceStrategyPackagesAsync(CancellationToken cancellationToken)
-    {
-        var packages = await _deviceStrategyPackageStore.LoadPackagesAsync(cancellationToken);
-        var currentSelectedId = SelectedDeviceStrategyPackage?.Package.PackageId;
-        RebuildDeviceStrategyPackageItems(packages, currentSelectedId);
-
-        if (DeviceStrategyPackages.Count == 0)
-        {
-            SelectedDeviceStrategyPackage = null;
-        }
-        else
-        {
-            SelectedDeviceStrategyPackage = DeviceStrategyPackages.FirstOrDefault(item => item.Package.PackageId == currentSelectedId);
-        }
-
-        RefreshStorageSummary();
-    }
-
-    private async Task LoadCommunityProfilesAsync(CancellationToken cancellationToken)
-    {
-        _allCommunityEntries = await _communityProfileCatalog.LoadProfilesAsync(cancellationToken);
-        _allCommunityDeviceStrategyEntries = await _communityDeviceStrategyCatalog.LoadStrategiesAsync(cancellationToken);
-        ApplyCommunityFilter();
-
-        SetCommunityCatalogStatus(
-            _allCommunityEntries.Count == 0 && _allCommunityDeviceStrategyEntries.Count == 0
-                ? "Status.CommunityCatalogEmpty"
-                : "Status.CommunityCatalogLoadedWithStrategies",
-            _allCommunityDeviceStrategyEntries.Count,
-            _allCommunityEntries.Count);
-    }
-
-    private async Task LoadPowerPlansAsync(CancellationToken cancellationToken = default)
-    {
-        var plans = await _powerPlanManager.GetAvailablePlansAsync(cancellationToken);
-        var previousSelection = ProfileDraft.SelectedPowerPlan?.SchemeGuid;
-
-        PowerPlanOptions.Clear();
-        PowerPlanOptions.Add(new PowerPlanOptionViewModel(null, T("Common.KeepCurrentPlan")));
-
-        foreach (var plan in plans)
-        {
-            PowerPlanOptions.Add(PowerPlanOptionViewModel.FromModel(plan));
-        }
-
-        ProfileDraft.SelectedPowerPlan = PowerPlanOptions.FirstOrDefault(option => option.SchemeGuid == previousSelection) ??
-                                         PowerPlanOptions.FirstOrDefault();
-    }
-
-    private async Task CreateNewProfileAsync()
-    {
-        await LoadPowerPlansAsync();
-        SelectedProfile = null;
-        ProfileDraft.Reset(PowerPlanOptions);
-        ApplyDefaultDraftName();
-        SetProfileEditorStatus("Status.CreatingNewProfile");
-        ApplyValidationIssues(ProfileDraft.GetValidationMessages());
-    }
-
-    private async Task SaveProfileAsync()
-    {
-        var validationIssues = ProfileDraft.GetValidationMessages();
-
-        if (ProfileDraft.IsGlobalDefault)
-        {
-            var existingProfiles = await _profileManager.LoadProfilesAsync();
-            var conflictingGlobalDefault = existingProfiles.FirstOrDefault(profile =>
-                profile.IsEnabled &&
-                profile.IsGlobalDefault &&
-                !string.Equals(profile.Id, ProfileDraft.Id, StringComparison.OrdinalIgnoreCase));
-
-            if (conflictingGlobalDefault is not null)
-            {
-                validationIssues = validationIssues
-                    .Concat(new[] { F("Validation.OnlyOneGlobalDefaultProfile", conflictingGlobalDefault.Name) })
-                    .ToArray();
-            }
-        }
-
-        ApplyValidationIssues(validationIssues);
-        if (validationIssues.Count > 0)
-        {
-            SetProfileEditorStatus("Status.ProfileHasValidationIssues");
-            MessageBox.Show(
-                string.Join(Environment.NewLine, validationIssues),
-                T("Dialog.ProfileValidationTitle"),
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            return;
-        }
-
-        var profile = ProfileDraft.ToProfile();
-        await _profileManager.SaveProfileAsync(profile);
-        _logger.Info($"Profile saved: {profile.Name} ({profile.Id})");
-        await LoadProfilesAsync();
-        SelectedProfile = Profiles.FirstOrDefault(item => item.Profile.Id == profile.Id);
-        SetProfileEditorStatus("Status.SavedProfile", profile.Name);
-        SetValidationSummary("Validation.Passed");
-    }
-
-    private async Task ImportProfilesAsync()
-    {
-        var dialog = new OpenFileDialog
-        {
-            Filter = "JSON Files (*.json)|*.json|All Files (*.*)|*.*",
-            Title = T("Dialog.ImportProfilesTitle")
-        };
-
-        if (dialog.ShowDialog() != true)
-        {
-            return;
-        }
-
-        var overwriteExisting = MessageBox.Show(
-            T("Dialog.ImportOverwriteQuestion"),
-            T("Dialog.ImportProfilesTitle"),
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question) == MessageBoxResult.Yes;
-
-        await _profileManager.ImportProfilesAsync(dialog.FileName, overwriteExisting);
-        _logger.Info($"Profiles imported from {dialog.FileName}.");
-        await LoadProfilesAsync();
-        SetProfileEditorStatus("Status.ImportedProfiles", dialog.FileName);
-    }
-
-    private async Task ExportProfilesAsync()
-    {
-        var dialog = new SaveFileDialog
-        {
-            Filter = "JSON Files (*.json)|*.json|All Files (*.*)|*.*",
-            FileName = $"profiles-export-{DateTime.Now:yyyyMMdd-HHmmss}.json",
-            Title = T("Dialog.ExportProfilesTitle")
-        };
-
-        if (dialog.ShowDialog() != true)
-        {
-            return;
-        }
-
-        await _profileManager.ExportProfilesAsync(dialog.FileName);
-        _logger.Info($"Profiles exported to {dialog.FileName}.");
-        SetProfileEditorStatus("Status.ExportedProfiles", dialog.FileName);
-    }
-
-    private async Task ExportMigrationPackageAsync()
-    {
-        var dialog = new SaveFileDialog
-        {
-            Filter = "Migration Package (*.sxtpkg.json)|*.sxtpkg.json|JSON Files (*.json)|*.json|All Files (*.*)|*.*",
-            FileName = $"suixindiao-migration-{DateTime.Now:yyyyMMdd-HHmmss}.sxtpkg.json",
-            Title = T("Dialog.ExportMigrationPackageTitle")
-        };
-
-        if (dialog.ShowDialog() != true)
-        {
-            return;
-        }
-
-        await _migrationPackageService.ExportAsync(
-            dialog.FileName,
-            new MigrationPackageExportOptions
-            {
-                IncludeProfiles = true,
-                IncludeDeviceStrategyPackages = true,
-                IncludeSettings = true
-            });
-        _logger.Info($"Migration package exported to {dialog.FileName}.");
-        SetProfileEditorStatus("Status.ExportedMigrationPackage", dialog.FileName);
-    }
-
-    private async Task ImportMigrationPackageAsync()
-    {
-        var dialog = new OpenFileDialog
-        {
-            Filter = "Migration Package (*.sxtpkg.json)|*.sxtpkg.json|JSON Files (*.json)|*.json|All Files (*.*)|*.*",
-            Title = T("Dialog.ImportMigrationPackageTitle")
-        };
-
-        if (dialog.ShowDialog() != true)
-        {
-            return;
-        }
-
-        var preview = await _migrationPackageService.PreviewImportAsync(dialog.FileName);
-        var compatibilityMessage = T(preview.Compatibility.ReasonKey);
-        var confirmation = MessageBox.Show(
-            F(
-                "Dialog.ImportMigrationPackageQuestion",
-                preview.ProfileCount,
-                preview.DeviceStrategyPackageCount,
-                preview.HasSettings ? T("Common.Yes") : T("Common.No"),
-                compatibilityMessage),
-            T("Dialog.ImportMigrationPackageTitle"),
-            MessageBoxButton.YesNo,
-            preview.Compatibility.ShouldWarn ? MessageBoxImage.Warning : MessageBoxImage.Question);
-
-        if (confirmation != MessageBoxResult.Yes)
-        {
-            SetProfileEditorStatus("Status.MigrationImportCancelled");
-            return;
-        }
-
-        var overwriteExisting = MessageBox.Show(
-            T("Dialog.ImportOverwriteQuestion"),
-            T("Dialog.ImportMigrationPackageTitle"),
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question) == MessageBoxResult.Yes;
-
-        var result = await _migrationPackageService.ImportAsync(
-            dialog.FileName,
-            new MigrationPackageImportOptions
-            {
-                ImportProfiles = true,
-                ImportDeviceStrategyPackages = true,
-                ImportSettings = true,
-                OverwriteExistingProfiles = overwriteExisting
-            });
-
-        _logger.Info($"Migration package imported from {dialog.FileName}.");
-        if (result.ImportedSettings)
-        {
-            _startupRegistrationService.SetEnabled(_settingsStore.Current.LaunchAtStartup);
-            LoadSettings();
-            NotifySettingsChanged();
-            if (!string.IsNullOrWhiteSpace(_settingsStore.Current.LanguageCode))
-            {
-                _localizationService.SetLanguage(_settingsStore.Current.LanguageCode);
-            }
-        }
-
-        await LoadLocalLibraryAsync();
-        RebuildLocalizedViewState();
-        SetProfileEditorStatus(
-            "Status.ImportedMigrationPackage",
-            result.ImportedProfiles,
-            result.ImportedDeviceStrategyPackages,
-            result.ImportedSettings ? T("Common.Yes") : T("Common.No"),
-            T(result.Compatibility.ReasonKey));
-    }
-
-    private async Task ImportSelectedCommunityProfileAsync()
-    {
-        if (SelectedCommunityProfile is null)
-        {
-            SetCommunityCatalogStatus("Status.SelectCommunityProfile");
-            return;
-        }
-
-        var entry = SelectedCommunityProfile.Entry;
-        var existingProfile = (await _profileManager.LoadProfilesAsync())
-            .FirstOrDefault(profile => string.Equals(profile.Id, entry.Profile.Id, StringComparison.OrdinalIgnoreCase));
-
-        if (existingProfile is not null)
-        {
-            var overwrite = MessageBox.Show(
-                F("Dialog.ImportCommunityOverwriteQuestion", existingProfile.Name),
-                T("Dialog.ImportCommunityTitle"),
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question);
-
-            if (overwrite != MessageBoxResult.Yes)
-            {
-                SetCommunityCatalogStatus("Status.CommunityImportCancelled", entry.Name);
-                return;
-            }
-        }
-
-        await _profileManager.SaveProfileAsync(entry.Profile);
-        _logger.Info($"Community profile imported: {entry.Name} ({entry.Profile.Id}) from {entry.Author}.");
-        await LoadProfilesAsync();
-        SelectedProfile = Profiles.FirstOrDefault(item => item.Profile.Id == entry.Profile.Id);
-        SetCommunityCatalogStatus("Status.ImportedCommunityProfile", entry.Name);
-        SetProfileEditorStatus("Status.ImportedCommunityProfile", entry.Name);
-    }
-
-    private async Task ImportSelectedCommunityDeviceStrategyAsync()
-    {
-        if (SelectedCommunityDeviceStrategy is null)
-        {
-            SetCommunityCatalogStatus("Status.SelectCommunityDeviceStrategy");
-            return;
-        }
-
-        var entry = SelectedCommunityDeviceStrategy.Entry;
-        var package = entry.Package;
-        var packageItems = package.Profiles
-            .Where(item => !string.IsNullOrWhiteSpace(item.Profile.Id))
-            .GroupBy(item => item.Profile.Id, StringComparer.OrdinalIgnoreCase)
-            .Select(group => group.First())
-            .ToArray();
-
-        if (packageItems.Length == 0)
-        {
-            SetCommunityCatalogStatus("Status.DeviceStrategyPackageEmpty", entry.Name);
-            return;
-        }
-
-        var currentDevice = await _deviceFingerprintProvider.GetCurrentAsync();
-        var compatibility = _deviceCompatibilityEvaluator.Evaluate(package.TargetDevice, currentDevice);
-        if (compatibility.ShouldWarn)
-        {
-            var continueImport = MessageBox.Show(
-                F("Dialog.ImportDeviceStrategyCompatibilityQuestion", entry.Name, T(compatibility.ReasonKey)),
-                T("Dialog.ImportDeviceStrategyTitle"),
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
-
-            if (continueImport != MessageBoxResult.Yes)
-            {
-                SetCommunityCatalogStatus("Status.DeviceStrategyImportCancelled", entry.Name);
-                return;
-            }
-        }
-
-        var localProfiles = await _profileManager.LoadProfilesAsync();
-        var existingIds = localProfiles
-            .Select(profile => profile.Id)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var conflictCount = packageItems.Count(item => existingIds.Contains(item.Profile.Id));
-        var overwriteExisting = conflictCount == 0;
-
-        if (conflictCount > 0)
-        {
-            var overwrite = MessageBox.Show(
-                F("Dialog.ImportDeviceStrategyOverwriteQuestion", conflictCount),
-                T("Dialog.ImportDeviceStrategyTitle"),
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question);
-
-            overwriteExisting = overwrite == MessageBoxResult.Yes;
-        }
-
-        var importedIds = new List<string>();
-        var skippedCount = 0;
-        foreach (var item in packageItems)
-        {
-            var profile = item.Profile;
-            if (existingIds.Contains(profile.Id) && !overwriteExisting)
-            {
-                skippedCount++;
-                continue;
-            }
-
-            var profileToImport = profile with
-            {
-                IsEnabled = profile.IsEnabled && item.IsEnabledByDefault
-            };
-
-            await _profileManager.SaveProfileAsync(profileToImport);
-            importedIds.Add(profile.Id);
-        }
-
-        var localPackage = package with
-        {
-            Author = string.Equals(package.Author, "Unknown", StringComparison.OrdinalIgnoreCase) ? entry.Author : package.Author,
-            Source = entry.Source,
-            UpdatedAt = entry.UpdatedAt,
-            Profiles = packageItems
-                .Select(item => item with
-                {
-                    Profile = item.Profile with
-                    {
-                        IsEnabled = item.Profile.IsEnabled && item.IsEnabledByDefault
-                    }
-                })
-                .ToArray()
-        };
-        await _deviceStrategyPackageStore.SavePackageAsync(localPackage);
-
-        _logger.Info(
-            $"Community device strategy imported: {entry.Name} ({package.PackageId}). Imported {importedIds.Count}, skipped {skippedCount}.");
-        await LoadLocalLibraryAsync();
-        SelectedDeviceStrategyPackage = DeviceStrategyPackages.FirstOrDefault(item =>
-            string.Equals(item.Package.PackageId, localPackage.PackageId, StringComparison.OrdinalIgnoreCase));
-        if (importedIds.Count > 0)
-        {
-            SelectedProfile = Profiles.FirstOrDefault(item => importedIds.Contains(item.Profile.Id, StringComparer.OrdinalIgnoreCase));
-        }
-
-        SetCommunityCatalogStatus(
-            "Status.ImportedCommunityDeviceStrategy",
-            entry.Name,
-            importedIds.Count,
-            skippedCount,
-            T(compatibility.ReasonKey));
-        SetProfileEditorStatus(
-            "Status.ImportedCommunityDeviceStrategy",
-            entry.Name,
-            importedIds.Count,
-            skippedCount,
-            T(compatibility.ReasonKey));
-    }
-
-    private async Task RollbackProfileAsync()
-    {
-        if (SelectedProfile is null || SelectedProfileRevision is null)
-        {
-            SetProfileEditorStatus("Status.SelectProfileRevision");
-            return;
-        }
-
-        var selectedProfile = SelectedProfile;
-        var selectedRevision = SelectedProfileRevision;
-
-        var result = MessageBox.Show(
-            F("Dialog.RollbackProfileQuestion", selectedProfile.Profile.Name, selectedRevision.DisplayName),
-            T("Dialog.RollbackProfileTitle"),
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question);
-
-        if (result != MessageBoxResult.Yes)
-        {
-            return;
-        }
-
-        var restoredProfile = await _profileManager.RollbackProfileAsync(
-            selectedProfile.Profile.Id,
-            selectedRevision.RevisionId);
-
-        if (restoredProfile is null)
-        {
-            SetProfileEditorStatus("Status.ProfileRollbackFailed");
-            return;
-        }
-
-        _logger.Info($"Profile rolled back: {restoredProfile.Name} ({restoredProfile.Id}) from {selectedRevision.RevisionId}.");
-        await LoadProfilesAsync();
-        SelectedProfile = Profiles.FirstOrDefault(item => item.Profile.Id == restoredProfile.Id);
-        SetProfileEditorStatus("Status.RolledBackProfile", restoredProfile.Name, selectedRevision.DisplayName);
-        SetValidationSummary("Status.ValidationReady");
-    }
-
-    private void AddBackgroundPolicy()
-    {
-        var suggestedCategory = BackgroundPolicyCategoryOptions
-            .Select(option => option.Value)
-            .FirstOrDefault(category => ProfileDraft.BackgroundPolicies.All(
-                existing => !string.Equals(existing.Category, category, StringComparison.OrdinalIgnoreCase)))
-            ?? "default";
-
-        ProfileDraft.BackgroundPolicies.Add(new BackgroundPolicyDraftItemViewModel
-        {
-            Category = suggestedCategory,
-            TargetPriority = PriorityLevel.BelowNormal
-        });
-
-        SetProfileEditorStatus("Status.AddedBackgroundPolicy", GetCategoryLabel(suggestedCategory));
-    }
-
-    private void RemoveBackgroundPolicy(BackgroundPolicyDraftItemViewModel? policy)
-    {
-        if (policy is null)
-        {
-            return;
-        }
-
-        ProfileDraft.BackgroundPolicies.Remove(policy);
-        SetProfileEditorStatus("Status.RemovedBackgroundPolicy", GetCategoryLabel(policy.Category));
-    }
-
-    private void ResumeScheduling()
-    {
-        IsSchedulingSuspended = false;
-        SetMonitoringStatus("Status.SchedulingResumed");
-    }
-
-    private void SelectCommunitySection(string? section)
-    {
-        SelectedCommunityCatalogSection = string.Equals(section, "Profiles", StringComparison.OrdinalIgnoreCase)
-            ? CommunityCatalogSection.Profiles
-            : CommunityCatalogSection.DeviceStrategies;
-    }
-
     private void AnnounceForegroundEvaluation(SchedulerRunResult result, bool updateMonitoringStatus)
     {
-        var backgroundCount = result.BackgroundAdjustments.Count(item => item.Status == SchedulerActionStatus.Applied);
-        var statusKey = result.MatchResult is null
-            ? "Status.SummaryNoMatch"
-            : backgroundCount == 0
-                ? "Status.SummaryAppliedProfile"
-                : "Status.SummaryAppliedProfileWithBackground";
-
-        object[] statusArgs = result.MatchResult is null
-            ? [result.ActiveApp?.ProcessName ?? T("Status.Unknown")]
-            : backgroundCount == 0
-                ? [result.MatchResult.Profile.Name, result.ActiveApp?.ProcessName ?? T("Status.Unknown")]
-                : [result.MatchResult.Profile.Name, result.ActiveApp?.ProcessName ?? T("Status.Unknown"), backgroundCount];
-
         if (updateMonitoringStatus)
         {
-            SetMonitoringStatus(statusKey, statusArgs);
+            var status = GetResultStatus(result);
+            SetMonitoringStatus(status.Key, status.Arguments);
         }
     }
 
@@ -1945,6 +1572,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         }
 
         SupportsGpuVendorExtensions = capabilities.Gpu.SupportsVendorExtensions;
+        SupportsEfficiencyModeHint = capabilities.SupportsEfficiencyModeHint;
         SupportsGpuClockLimit = capabilities.Gpu.SupportsClockLimit;
         SupportsGpuVoltageControl = capabilities.Gpu.SupportsVoltageControl;
         GpuAdapterSummary = capabilities.Gpu.HasDetectedAdapter
@@ -1972,6 +1600,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         ProfileReason = result.MatchResult is null
             ? T("Status.CurrentForegroundNoMatch")
             : F("Status.ProfileScoreFormat", result.MatchResult.Score, result.MatchResult.Profile.Version);
+        RefreshProfileMatchReasons(result.MatchResult);
         ActivePowerPlanName = result.ActivePowerPlan?.Name ?? T("Status.NoActivePowerPlan");
         PrioritySummary = result.PriorityChange is null
             ? T("Status.NoPriorityChange")
@@ -1981,24 +1610,71 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
                 result.PriorityChange.PreviousPriority is { } priority
                     ? GetPriorityLabel(priority)
                     : T("Status.PreviousUnknown"));
-        MetricsSummary = result.Metrics is null
+        MetricsSummary = result.Metrics is null || !result.Metrics.IsAvailable
             ? T("Status.NoMetricsYet")
-            : F("Status.MetricsSummaryFormat", result.Metrics.WorkingSetMb, result.Metrics.ThreadCount);
+            : F(
+                "Status.MetricsSummaryFormat",
+                result.Metrics.CpuUsagePercent is { } cpuUsage ? $"{cpuUsage:F1}%" : "--",
+                result.Metrics.WorkingSetMb,
+                result.Metrics.ThreadCount);
         LastSummary = BuildLocalizedResultSummary(result);
         LastRefreshTime = F("Status.LastScanFormat", result.OccurredAt.LocalDateTime);
     }
 
     private string BuildLocalizedResultSummary(SchedulerRunResult result)
     {
+        var status = GetResultStatus(result);
+        return F(status.Key, status.Arguments);
+    }
+
+    private (string Key, object[] Arguments) GetResultStatus(SchedulerRunResult result)
+    {
+        var profileName = result.MatchResult?.Profile.Name ?? T("Status.Unknown");
+        if (result.IsRetryDeferred && result.RetryAfter is { } retryAfter)
+        {
+            return (
+                "Status.SummaryRetryDeferred",
+                [profileName, result.ConsecutiveFailureCount, retryAfter.LocalDateTime]);
+        }
+
+        if (!result.Success && result.MatchResult is not null)
+        {
+            if (result.FailureRecoveryCompleted == false && result.Actions.Count == 0)
+            {
+                return ("Status.SummaryRecoveryBlocked", [profileName]);
+            }
+
+            var failedActionCount = result.Actions.Count(action => action.Status == SchedulerActionStatus.Failed);
+            if (result.FailureRecoveryCompleted == false)
+            {
+                return ("Status.SummaryProfileFailedRecoveryPending", [profileName, failedActionCount]);
+            }
+
+            return result.RetryAfter is { } nextRetry
+                ? (
+                    "Status.SummaryProfileFailedRecovered",
+                    [profileName, failedActionCount, result.ConsecutiveFailureCount, nextRetry.LocalDateTime])
+                : ("Status.SummaryEvaluationFailed", Array.Empty<object>());
+        }
+
+        if (!result.Success)
+        {
+            return ("Status.SummaryEvaluationFailed", Array.Empty<object>());
+        }
+
         if (result.MatchResult is null)
         {
-            return F("Status.SummaryNoMatch", result.ActiveApp?.ProcessName ?? T("Status.Unknown"));
+            return ("Status.SummaryNoMatch", [result.ActiveApp?.ProcessName ?? T("Status.Unknown")]);
         }
 
         var backgroundCount = result.BackgroundAdjustments.Count(item => item.Status == SchedulerActionStatus.Applied);
         return backgroundCount == 0
-            ? F("Status.SummaryAppliedProfile", result.MatchResult.Profile.Name, result.ActiveApp?.ProcessName ?? T("Status.Unknown"))
-            : F("Status.SummaryAppliedProfileWithBackground", result.MatchResult.Profile.Name, result.ActiveApp?.ProcessName ?? T("Status.Unknown"), backgroundCount);
+            ? (
+                "Status.SummaryAppliedProfile",
+                [profileName, result.ActiveApp?.ProcessName ?? T("Status.Unknown")])
+            : (
+                "Status.SummaryAppliedProfileWithBackground",
+                [profileName, result.ActiveApp?.ProcessName ?? T("Status.Unknown"), backgroundCount]);
     }
 
     private void ReloadRecentLogs()
@@ -2006,227 +1682,8 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         RecentLogs.Clear();
         foreach (var entry in _logger.GetRecentEntries().Reverse())
         {
-            RecentLogs.Add(entry);
+            RecentLogs.Add(CreateLogEntryItem(entry));
         }
-    }
-
-    private void RebuildProfileItems(IEnumerable<PerformanceProfile> profiles, string? selectedId)
-    {
-        var mappedItems = profiles
-            .Select(CreateProfileListItem)
-            .ToArray();
-
-        Profiles.Clear();
-        foreach (var item in mappedItems)
-        {
-            Profiles.Add(item);
-        }
-
-        if (!string.IsNullOrWhiteSpace(selectedId))
-        {
-            SelectedProfile = Profiles.FirstOrDefault(item => item.Profile.Id == selectedId);
-        }
-
-        OnPropertyChanged(nameof(LocalProfileCount));
-        OnPropertyChanged(nameof(NavigationProfilesSummary));
-    }
-
-    private void RebuildDeviceStrategyPackageItems(IEnumerable<DeviceStrategyPackage> packages, string? selectedPackageId)
-    {
-        var mappedItems = packages
-            .Select(CreateDeviceStrategyPackageListItem)
-            .ToArray();
-
-        DeviceStrategyPackages.Clear();
-        foreach (var item in mappedItems)
-        {
-            DeviceStrategyPackages.Add(item);
-        }
-
-        if (!string.IsNullOrWhiteSpace(selectedPackageId))
-        {
-            SelectedDeviceStrategyPackage = DeviceStrategyPackages.FirstOrDefault(item =>
-                string.Equals(item.Package.PackageId, selectedPackageId, StringComparison.OrdinalIgnoreCase));
-        }
-
-        OnPropertyChanged(nameof(LocalDeviceStrategyCount));
-        OnPropertyChanged(nameof(NavigationProfilesSummary));
-    }
-
-    private void RebuildCommunityProfileItems(IEnumerable<CommunityProfileEntry> entries, string? selectedEntryId)
-    {
-        var mappedItems = entries
-            .Select(CreateCommunityProfileListItem)
-            .ToArray();
-
-        CommunityProfiles.Clear();
-        foreach (var item in mappedItems)
-        {
-            CommunityProfiles.Add(item);
-        }
-
-        if (!string.IsNullOrWhiteSpace(selectedEntryId))
-        {
-            SelectedCommunityProfile = CommunityProfiles.FirstOrDefault(item => item.Entry.EntryId == selectedEntryId);
-        }
-
-        OnPropertyChanged(nameof(CommunityProfileCount));
-        OnPropertyChanged(nameof(NavigationCommunitySummary));
-    }
-
-    private void RebuildCommunityDeviceStrategyItems(IEnumerable<CommunityDeviceStrategyEntry> entries, string? selectedEntryId)
-    {
-        var mappedItems = entries
-            .Select(CreateCommunityDeviceStrategyListItem)
-            .ToArray();
-
-        CommunityDeviceStrategies.Clear();
-        foreach (var item in mappedItems)
-        {
-            CommunityDeviceStrategies.Add(item);
-        }
-
-        if (!string.IsNullOrWhiteSpace(selectedEntryId))
-        {
-            SelectedCommunityDeviceStrategy = CommunityDeviceStrategies.FirstOrDefault(item => item.Entry.EntryId == selectedEntryId);
-        }
-
-        if (SelectedCommunityDeviceStrategy is null)
-        {
-            SelectedCommunityDeviceStrategy = CommunityDeviceStrategies.FirstOrDefault();
-        }
-
-        OnPropertyChanged(nameof(CommunityDeviceStrategyCount));
-        OnPropertyChanged(nameof(NavigationCommunitySummary));
-    }
-
-    private void ApplyCommunityFilter()
-    {
-        var selectedEntryId = SelectedCommunityProfile?.Entry.EntryId;
-        var selectedDeviceStrategyId = SelectedCommunityDeviceStrategy?.Entry.EntryId;
-        var filteredEntries = _communityProfileCatalogFilter.Apply(_allCommunityEntries, new CommunityProfileFilterCriteria
-        {
-            SearchText = CommunitySearchText,
-            SourceFilter = SelectedCommunitySourceFilter,
-            PowerSourceFilter = SelectedCommunityPowerFilter,
-            ClassificationFilter = SelectedCommunityClassificationFilter
-        });
-        var filteredDeviceStrategies = FilterCommunityDeviceStrategies();
-
-        RebuildCommunityProfileItems(filteredEntries, selectedEntryId);
-        RebuildCommunityDeviceStrategyItems(filteredDeviceStrategies, selectedDeviceStrategyId);
-        if (SelectedCommunityProfile is null)
-        {
-            SelectedCommunityProfile = CommunityProfiles.FirstOrDefault();
-        }
-
-        CommunityFilterSummary = IsCommunityDeviceStrategiesSelected
-            ? F("Status.CommunityDeviceStrategyFilterSummaryFormat", CommunityDeviceStrategies.Count, _allCommunityDeviceStrategyEntries.Count)
-            : F("Status.CommunityFilterSummaryFormat", CommunityProfiles.Count, _allCommunityEntries.Count);
-    }
-
-    private IReadOnlyList<CommunityDeviceStrategyEntry> FilterCommunityDeviceStrategies()
-    {
-        var expectedSource = SelectedCommunitySourceFilter switch
-        {
-            CommunitySourceFilter.Official => CommunityProfileSource.Official,
-            CommunitySourceFilter.Community => CommunityProfileSource.Community,
-            _ => (CommunityProfileSource?)null
-        };
-        var searchText = CommunitySearchText.Trim();
-
-        return _allCommunityDeviceStrategyEntries
-            .Where(entry => expectedSource is null || entry.Source == expectedSource)
-            .Where(entry => string.IsNullOrWhiteSpace(searchText) ||
-                            entry.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
-                            entry.Summary.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
-                            entry.Package.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
-                            entry.Package.TargetDevice.Model.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
-                            entry.Package.TargetDevice.CpuName.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
-                            entry.Package.TargetDevice.GpuNames.Any(gpu => gpu.Contains(searchText, StringComparison.OrdinalIgnoreCase)))
-            .ToArray();
-    }
-
-    private ProfileListItemViewModel CreateProfileListItem(PerformanceProfile profile) =>
-        new()
-        {
-            Profile = profile,
-            Name = profile.Name,
-            Summary = F(
-                "Status.ProfileListSummaryFormat",
-                BuildProfileSummaryTag(profile),
-                GetPriorityLabel(profile.Priority.ForegroundPriority),
-                profile.Version),
-            EnabledText = F("Status.EnabledFormat", profile.IsEnabled ? T("Common.Yes") : T("Common.No"))
-        };
-
-    private DeviceStrategyPackageListItemViewModel CreateDeviceStrategyPackageListItem(DeviceStrategyPackage package) =>
-        new()
-        {
-            Package = package,
-            Name = package.Name,
-            Summary = string.IsNullOrWhiteSpace(package.Summary) ? T("Status.DeviceStrategyNoSummary") : package.Summary,
-            Meta = F(
-                "Status.LocalDeviceStrategyPackageMetaFormat",
-                package.Profiles.Count,
-                GetCommunitySourceLabel(package.Source),
-                FormatDeviceTarget(package.TargetDevice))
-        };
-
-    private CommunityProfileListItemViewModel CreateCommunityProfileListItem(CommunityProfileEntry entry) =>
-        new()
-        {
-            Entry = entry,
-            Name = entry.Name,
-            Summary = F(
-                "Status.CommunityProfileSummaryFormat",
-                GetCommunitySourceLabel(entry.Source),
-                GetClassificationLabel(entry.Profile.TargetClassification),
-                GetPowerSourceLabel(entry.Profile.PowerSourceMode)),
-            Description = string.IsNullOrWhiteSpace(entry.Summary)
-                ? entry.Profile.Notes
-                : entry.Summary,
-            Meta = F(
-                "Status.CommunityProfileMetaFormat",
-                entry.Author,
-                entry.Downloads,
-                entry.UpdatedAt.LocalDateTime)
-        };
-
-    private CommunityDeviceStrategyListItemViewModel CreateCommunityDeviceStrategyListItem(CommunityDeviceStrategyEntry entry) =>
-        new()
-        {
-            Entry = entry,
-            Name = entry.Name,
-            Summary = F(
-                "Status.CommunityDeviceStrategySummaryFormat",
-                GetCommunitySourceLabel(entry.Source),
-                FormatDeviceTarget(entry.Package.TargetDevice),
-                entry.Package.Profiles.Count),
-            Description = string.IsNullOrWhiteSpace(entry.Summary)
-                ? entry.Package.Summary
-                : entry.Summary,
-            Meta = F(
-                "Status.CommunityProfileMetaFormat",
-                entry.Author,
-                entry.Downloads,
-                entry.UpdatedAt.LocalDateTime)
-        };
-
-    private string FormatDeviceTarget(DeviceFingerprint device)
-    {
-        var model = string.Join(
-            " ",
-            new[] { device.Manufacturer, device.Model }.Where(static value => !string.IsNullOrWhiteSpace(value)));
-        var gpu = device.GpuNames.FirstOrDefault() ?? T("Status.Unknown");
-
-        return string.IsNullOrWhiteSpace(model) && string.IsNullOrWhiteSpace(device.CpuName)
-            ? T("Status.Unknown")
-            : F(
-                "Status.DeviceStrategyTargetFormat",
-                string.IsNullOrWhiteSpace(model) ? T("Status.Unknown") : model,
-                string.IsNullOrWhiteSpace(device.CpuName) ? T("Status.Unknown") : device.CpuName,
-                gpu);
     }
 
     private void RefreshStorageSummary()
@@ -2269,259 +1726,6 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             _logger.Error($"Failed to open directory: {directory}", exception);
             SetMonitoringStatus("Status.OpenDirectoryFailed", directory, exception.Message);
         }
-    }
-
-    private void ChooseAppearanceBackgroundImage()
-    {
-        var dialog = new OpenFileDialog
-        {
-            Filter = "Image Files (*.png;*.jpg;*.jpeg;*.bmp)|*.png;*.jpg;*.jpeg;*.bmp|All Files (*.*)|*.*",
-            Title = T("Dialog.SelectBackgroundImageTitle")
-        };
-
-        if (dialog.ShowDialog() != true)
-        {
-            return;
-        }
-
-        try
-        {
-            Directory.CreateDirectory(_appearanceAssetsDirectory);
-            var extension = Path.GetExtension(dialog.FileName);
-            if (string.IsNullOrWhiteSpace(extension))
-            {
-                extension = ".png";
-            }
-
-            var targetPath = Path.Combine(_appearanceAssetsDirectory, $"window-background{extension.ToLowerInvariant()}");
-            CopyFileUnlessSamePath(dialog.FileName, targetPath);
-
-            SelectedAppearanceBackgroundMode = "unified";
-            AppearanceBackgroundImagePath = targetPath;
-            AppearanceBackgroundImageEnabled = true;
-            _settingsStore.Update(settings =>
-            {
-                settings.AppearanceBackgroundImagePath = targetPath;
-                settings.AppearanceBackgroundImageEnabled = true;
-                settings.AppearanceBackgroundMode = "unified";
-            });
-            SetAppearanceStatus("Status.AppearanceBackgroundSelected", targetPath);
-        }
-        catch (Exception exception)
-        {
-            _logger.Error("Failed to set appearance background image.", exception);
-            SetAppearanceStatus("Status.AppearanceBackgroundFailed", exception.Message);
-        }
-    }
-
-    private void ChooseAppearanceRegionBackgroundImage(string region)
-    {
-        var dialog = new OpenFileDialog
-        {
-            Filter = "Image Files (*.png;*.jpg;*.jpeg;*.bmp)|*.png;*.jpg;*.jpeg;*.bmp|All Files (*.*)|*.*",
-            Title = T(region == "sidebar" ? "Dialog.SelectSidebarBackgroundImageTitle" : "Dialog.SelectContentBackgroundImageTitle")
-        };
-
-        if (dialog.ShowDialog() != true)
-        {
-            return;
-        }
-
-        try
-        {
-            Directory.CreateDirectory(_appearanceAssetsDirectory);
-            var isSidebar = string.Equals(region, "sidebar", StringComparison.OrdinalIgnoreCase);
-            var targetFileName = isSidebar
-                ? $"sidebar-background-preview-{Guid.NewGuid():N}.png"
-                : $"content-background-preview-{Guid.NewGuid():N}.png";
-            var targetPath = Path.Combine(_appearanceAssetsDirectory, targetFileName);
-
-            if (!TryCropRegionBackground(dialog.FileName, targetPath, isSidebar ? "sidebar" : "content"))
-            {
-                SetAppearanceStatus(isSidebar ? "Status.AppearanceSidebarBackgroundPreviewCancelled" : "Status.AppearanceContentBackgroundPreviewCancelled");
-                return;
-            }
-
-            SelectedAppearanceBackgroundMode = "split";
-            AppearanceBackgroundImageEnabled = true;
-            if (isSidebar)
-            {
-                SetPendingAppearanceSidebarBackgroundImagePath(targetPath);
-                _settingsStore.Update(settings =>
-                {
-                    settings.AppearanceBackgroundMode = "split";
-                    settings.AppearanceBackgroundImageEnabled = true;
-                });
-                SetAppearanceStatus("Status.AppearanceSidebarBackgroundPreviewLoaded", targetPath);
-                return;
-            }
-
-            SetPendingAppearanceContentBackgroundImagePath(targetPath);
-            _settingsStore.Update(settings =>
-            {
-                settings.AppearanceBackgroundMode = "split";
-                settings.AppearanceBackgroundImageEnabled = true;
-            });
-            SetAppearanceStatus("Status.AppearanceContentBackgroundPreviewLoaded", targetPath);
-        }
-        catch (Exception exception)
-        {
-            _logger.Error($"Failed to set {region} appearance background image.", exception);
-            SetAppearanceStatus("Status.AppearanceBackgroundFailed", exception.Message);
-        }
-    }
-
-    private bool TryCropRegionBackground(string sourcePath, string targetPath, string region)
-    {
-        var mainWindow = Application.Current.MainWindow;
-        var windowWidth = mainWindow?.ActualWidth > 0 ? mainWindow.ActualWidth : 1180d;
-        var windowHeight = mainWindow?.ActualHeight > 0 ? mainWindow.ActualHeight : 720d;
-        var isSidebar = string.Equals(region, "sidebar", StringComparison.OrdinalIgnoreCase);
-        var targetWidth = isSidebar ? 232d : Math.Max(360d, windowWidth - 232d);
-        var targetHeight = Math.Max(420d, windowHeight);
-        var cropWindow = new ImageCropWindow(
-            sourcePath,
-            targetPath,
-            targetWidth,
-            targetHeight,
-            T(isSidebar ? "Dialog.CropSidebarBackgroundTitle" : "Dialog.CropContentBackgroundTitle"),
-            T(isSidebar ? "Hint.CropSidebarBackgroundInstruction" : "Hint.CropContentBackgroundInstruction"),
-            T(isSidebar ? "Hint.CropSidebarBackgroundFooter" : "Hint.CropContentBackgroundFooter"),
-            T("Button.ConfirmCrop"),
-            T("Button.Cancel"));
-
-        if (mainWindow is not null)
-        {
-            cropWindow.Owner = mainWindow;
-        }
-
-        return cropWindow.ShowDialog() == true;
-    }
-
-    private void ApplyAppearanceSidebarBackgroundPreview()
-    {
-        if (!HasPendingAppearanceSidebarBackground)
-        {
-            return;
-        }
-
-        try
-        {
-            Directory.CreateDirectory(_appearanceAssetsDirectory);
-            var extension = Path.GetExtension(_pendingAppearanceSidebarBackgroundImagePath);
-            if (string.IsNullOrWhiteSpace(extension))
-            {
-                extension = ".png";
-            }
-
-            var targetPath = Path.Combine(_appearanceAssetsDirectory, $"sidebar-background{extension.ToLowerInvariant()}");
-            var pendingPath = _pendingAppearanceSidebarBackgroundImagePath;
-            CopyFileUnlessSamePath(pendingPath, targetPath);
-
-            AppearanceSidebarBackgroundImagePath = targetPath;
-            SetPendingAppearanceSidebarBackgroundImagePath(string.Empty);
-            DeleteFileIfExists(pendingPath);
-            SelectedAppearanceBackgroundMode = "split";
-            AppearanceBackgroundImageEnabled = true;
-            _settingsStore.Update(settings =>
-            {
-                settings.AppearanceSidebarBackgroundImagePath = targetPath;
-                settings.AppearanceBackgroundImageEnabled = true;
-                settings.AppearanceBackgroundMode = "split";
-            });
-            SetAppearanceStatus("Status.AppearanceSidebarBackgroundPreviewApplied", targetPath);
-        }
-        catch (Exception exception)
-        {
-            _logger.Error("Failed to apply sidebar appearance background preview.", exception);
-            SetAppearanceStatus("Status.AppearanceBackgroundFailed", exception.Message);
-        }
-    }
-
-    private void CancelAppearanceSidebarBackgroundPreview()
-    {
-        if (!HasPendingAppearanceSidebarBackground)
-        {
-            return;
-        }
-
-        var pendingPath = _pendingAppearanceSidebarBackgroundImagePath;
-        SetPendingAppearanceSidebarBackgroundImagePath(string.Empty);
-        DeleteFileIfExists(pendingPath);
-        SetAppearanceStatus("Status.AppearanceSidebarBackgroundPreviewCancelled");
-    }
-
-    private void ApplyAppearanceContentBackgroundPreview()
-    {
-        if (!HasPendingAppearanceContentBackground)
-        {
-            return;
-        }
-
-        try
-        {
-            Directory.CreateDirectory(_appearanceAssetsDirectory);
-            var targetPath = Path.Combine(_appearanceAssetsDirectory, "content-background.png");
-            var pendingPath = _pendingAppearanceContentBackgroundImagePath;
-            CopyFileUnlessSamePath(pendingPath, targetPath);
-
-            AppearanceContentBackgroundImagePath = targetPath;
-            SetPendingAppearanceContentBackgroundImagePath(string.Empty);
-            DeleteFileIfExists(pendingPath);
-            SelectedAppearanceBackgroundMode = "split";
-            AppearanceBackgroundImageEnabled = true;
-            _settingsStore.Update(settings =>
-            {
-                settings.AppearanceContentBackgroundImagePath = targetPath;
-                settings.AppearanceBackgroundImageEnabled = true;
-                settings.AppearanceBackgroundMode = "split";
-            });
-            SetAppearanceStatus("Status.AppearanceContentBackgroundPreviewApplied", targetPath);
-        }
-        catch (Exception exception)
-        {
-            _logger.Error("Failed to apply content appearance background preview.", exception);
-            SetAppearanceStatus("Status.AppearanceBackgroundFailed", exception.Message);
-        }
-    }
-
-    private void CancelAppearanceContentBackgroundPreview()
-    {
-        if (!HasPendingAppearanceContentBackground)
-        {
-            return;
-        }
-
-        var pendingPath = _pendingAppearanceContentBackgroundImagePath;
-        SetPendingAppearanceContentBackgroundImagePath(string.Empty);
-        DeleteFileIfExists(pendingPath);
-        SetAppearanceStatus("Status.AppearanceContentBackgroundPreviewCancelled");
-    }
-
-    private void ClearAppearanceBackgroundImage()
-    {
-        AppearanceBackgroundImagePath = string.Empty;
-        AppearanceBackgroundImageEnabled = false;
-        _settingsStore.Update(settings =>
-        {
-            settings.AppearanceBackgroundImagePath = null;
-            settings.AppearanceBackgroundImageEnabled = false;
-        });
-        SetAppearanceStatus("Status.AppearanceBackgroundCleared");
-    }
-
-    private void ClearAppearanceRegionBackgroundImages()
-    {
-        AppearanceSidebarBackgroundImagePath = string.Empty;
-        AppearanceContentBackgroundImagePath = string.Empty;
-        SetPendingAppearanceSidebarBackgroundImagePath(string.Empty);
-        SetPendingAppearanceContentBackgroundImagePath(string.Empty);
-        _settingsStore.Update(settings =>
-        {
-            settings.AppearanceSidebarBackgroundImagePath = null;
-            settings.AppearanceContentBackgroundImagePath = null;
-        });
-        SetAppearanceStatus("Status.AppearanceRegionBackgroundCleared");
     }
 
     private async Task LoadProfileHistoryAsync(string profileId)
@@ -2634,10 +1838,15 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         ValidationSummary = FormatByKey(_validationSummaryKey, _validationSummaryArgs);
     }
 
-    private void AddStatusCenterEvent(string sourceKey, string messageKey, object[] args, string level)
+    private void AddStatusCenterEvent(
+        string sourceKey,
+        string messageKey,
+        object[] args,
+        string level,
+        DateTimeOffset? timestamp = null)
     {
         _statusCenterEvents.Add(new StatusCenterEvent(
-            DateTimeOffset.Now,
+            timestamp ?? DateTimeOffset.Now,
             sourceKey,
             messageKey,
             args.ToArray(),
@@ -2717,6 +1926,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         ClassificationSummary = T("Status.ClassificationPending");
         MatchedProfileName = T("Status.NoProfileMatched");
         ProfileReason = T("Status.ProfileWaiting");
+        ProfileMatchReasons.Clear();
         ActivePowerPlanName = T("Status.Unknown");
         PrioritySummary = T("Status.NoPriorityChange");
         MetricsSummary = T("Status.NoMetricsYet");
@@ -2725,6 +1935,12 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         DeviceFingerprintSummary = T("Status.DeviceFingerprintUnavailable");
         LastSummary = T("Status.FirstFlow");
         LastRefreshTime = T("Status.NoScanTimestamp");
+        if (RuntimeHistoryItems.Count == 0)
+        {
+            ActionAuditItems.Clear();
+            ActionAuditSummary = T("Status.ActionAuditEmpty");
+            RefreshRuntimeHistoryDetail(null);
+        }
     }
 
     private void ApplyDefaultDraftName()
@@ -2749,7 +1965,7 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         }
 
         PriorityOptions.Clear();
-        foreach (var value in Enum.GetValues<PriorityLevel>())
+        foreach (var value in Enum.GetValues<PriorityLevel>().Where(value => value != PriorityLevel.RealTime))
         {
             PriorityOptions.Add(new ValueOptionViewModel<PriorityLevel>
             {
@@ -2882,10 +2098,16 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
         ApplyProfileEditorStatus();
         ApplyCommunityCatalogStatus();
         ApplyAppearanceStatus();
+        ApplyDiagnosticPackageStatus();
+        ApplyTelemetryObservationSummary();
+        RebuildTelemetryHistoryLines();
+        RefreshPresentMonConfigurationStatus();
         NotifyAppearanceBackgroundPropertiesChanged();
         RefreshStatusCenterItems();
         ApplyValidationIssues(ProfileDraft.GetValidationMessages());
         OnPropertyChanged(nameof(AppearanceBackgroundImageDisplayPath));
+        RelocalizeRecentLogs();
+        RelocalizeRuntimeHistory();
 
         if (_lastRunResult is null)
         {
@@ -2961,175 +2183,6 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     private string GetCommunitySourceFilterLabel(CommunitySourceFilter sourceFilter) =>
         T($"Enum.CommunitySourceFilter.{sourceFilter}");
 
-    private string GetAppearanceThemeDisplayName(string themeKey) =>
-        T(GetAppearanceTheme(themeKey).DisplayNameKey);
-
-    private static AppearanceThemeDefinition GetAppearanceTheme(string themeKey) =>
-        AppearanceThemes.FirstOrDefault(theme => string.Equals(theme.Key, themeKey, StringComparison.OrdinalIgnoreCase)) ??
-        AppearanceThemes[0];
-
-    private void ApplyAppearanceResources()
-    {
-        var theme = GetAppearanceTheme(SelectedAppearanceThemeKey);
-        var surfaceColor = TryParseAppearanceColor(AppearanceSurfaceColorHex, out var customSurfaceColor)
-            ? customSurfaceColor
-            : Colors.White;
-        var borderColor = TryParseAppearanceColor(AppearanceBorderColorHex, out var customBorderColor)
-            ? customBorderColor
-            : theme.Border;
-        UpdateBrushResource("AccentBrush", theme.Accent);
-        UpdateBrushResource("HighlightBrush", theme.Accent);
-        UpdateBrushResource("AccentSoftBrush", theme.AccentSoft);
-        UpdateBrushResource("CardBorderBrush", borderColor);
-        UpdateBrushResource("SidebarSelectedBrush", theme.AccentSoft);
-        UpdateBrushResource("SidebarBackgroundBrush", theme.Sidebar);
-        UpdateBrushResource("ScrollBarThumbBrush", WithAlpha(theme.Accent, 0x8A));
-        UpdateBrushResource("ScrollBarThumbHoverBrush", WithAlpha(theme.Accent, 0xBF));
-        UpdateBrushResource("ScrollBarThumbPressedBrush", WithAlpha(theme.Accent, 0xE6));
-        UpdateBrushResource("CardBackgroundBrush", WithAlpha(surfaceColor, ToByte(AppearanceCardOpacity)));
-        UpdateBrushResource("SidebarSurfaceBrush", WithAlpha(surfaceColor, ToByte(AppearanceCardOpacity)));
-
-        AppearanceWindowOverlayBrush = new SolidColorBrush(WithAlpha(Colors.White, ToByte(AppearanceWindowOverlayOpacity)));
-        AppearancePreviewOverlayBrush = new SolidColorBrush(WithAlpha(Colors.White, ToByte(Math.Clamp(AppearanceWindowOverlayOpacity, 0.0, 0.94))));
-        AppearanceSidebarOverlayBrush = new SolidColorBrush(WithAlpha(theme.Sidebar, ToByte(Math.Clamp(AppearanceWindowOverlayOpacity, 0.0, 0.98))));
-        AppearanceContentOverlayBrush = new SolidColorBrush(WithAlpha(Color.FromRgb(0xF8, 0xFA, 0xFD), ToByte(Math.Clamp(AppearanceWindowOverlayOpacity, 0.0, 0.98))));
-    }
-
-    private void NotifyAppearanceBackgroundPropertiesChanged()
-    {
-        OnPropertyChanged(nameof(AppearanceBackgroundImageVisibility));
-        OnPropertyChanged(nameof(AppearanceSidebarBackgroundImageVisibility));
-        OnPropertyChanged(nameof(AppearanceSidebarBackgroundPreviewPath));
-        OnPropertyChanged(nameof(AppearanceSidebarBackgroundPreviewVisibility));
-        OnPropertyChanged(nameof(AppearanceSidebarAdjustmentVisibility));
-        OnPropertyChanged(nameof(HasPendingAppearanceSidebarBackground));
-        OnPropertyChanged(nameof(AppearanceContentBackgroundImageVisibility));
-        OnPropertyChanged(nameof(AppearanceContentBackgroundPreviewPath));
-        OnPropertyChanged(nameof(AppearanceContentBackgroundPreviewVisibility));
-        OnPropertyChanged(nameof(AppearanceContentAdjustmentVisibility));
-        OnPropertyChanged(nameof(HasPendingAppearanceContentBackground));
-        OnPropertyChanged(nameof(AppearanceBackgroundImageDisplayPath));
-        OnPropertyChanged(nameof(AppearanceSplitBackgroundSummary));
-
-        if (ClearAppearanceBackgroundCommand is RelayCommand clearUnifiedCommand)
-        {
-            clearUnifiedCommand.RaiseCanExecuteChanged();
-        }
-
-        if (ClearAppearanceRegionBackgroundsCommand is RelayCommand clearRegionCommand)
-        {
-            clearRegionCommand.RaiseCanExecuteChanged();
-        }
-
-        if (ApplyAppearanceSidebarBackgroundPreviewCommand is RelayCommand applySidebarPreviewCommand)
-        {
-            applySidebarPreviewCommand.RaiseCanExecuteChanged();
-        }
-
-        if (CancelAppearanceSidebarBackgroundPreviewCommand is RelayCommand cancelSidebarPreviewCommand)
-        {
-            cancelSidebarPreviewCommand.RaiseCanExecuteChanged();
-        }
-
-        if (ApplyAppearanceContentBackgroundPreviewCommand is RelayCommand applyContentPreviewCommand)
-        {
-            applyContentPreviewCommand.RaiseCanExecuteChanged();
-        }
-
-        if (CancelAppearanceContentBackgroundPreviewCommand is RelayCommand cancelContentPreviewCommand)
-        {
-            cancelContentPreviewCommand.RaiseCanExecuteChanged();
-        }
-
-    }
-
-    private void SetPendingAppearanceSidebarBackgroundImagePath(string path)
-    {
-        if (SetProperty(ref _pendingAppearanceSidebarBackgroundImagePath, path, nameof(AppearanceSidebarBackgroundPreviewPath)))
-        {
-            NotifyAppearanceBackgroundPropertiesChanged();
-        }
-    }
-
-    private void SetPendingAppearanceContentBackgroundImagePath(string path)
-    {
-        if (SetProperty(ref _pendingAppearanceContentBackgroundImagePath, path, nameof(AppearanceContentBackgroundPreviewPath)))
-        {
-            NotifyAppearanceBackgroundPropertiesChanged();
-        }
-    }
-
-    private static void CopyFileUnlessSamePath(string sourcePath, string destinationPath)
-    {
-        var sourceFullPath = Path.GetFullPath(sourcePath);
-        var destinationFullPath = Path.GetFullPath(destinationPath);
-        if (string.Equals(sourceFullPath, destinationFullPath, StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
-        File.Copy(sourceFullPath, destinationFullPath, overwrite: true);
-    }
-
-    private void DeleteFileIfExists(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return;
-        }
-
-        try
-        {
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-        }
-        catch (Exception exception)
-        {
-            _logger.Warn($"Failed to delete temporary appearance file {path}: {exception.Message}");
-        }
-    }
-
-    private static void UpdateBrushResource(string key, Color color)
-    {
-        if (Application.Current.Resources[key] is SolidColorBrush brush)
-        {
-            if (brush.IsFrozen)
-            {
-                Application.Current.Resources[key] = new SolidColorBrush(color);
-                return;
-            }
-
-            brush.Color = color;
-            return;
-        }
-
-        Application.Current.Resources[key] = new SolidColorBrush(color);
-    }
-
-    private static Color WithAlpha(Color color, byte alpha) =>
-        Color.FromArgb(alpha, color.R, color.G, color.B);
-
-    private static byte ToByte(double opacity) =>
-        (byte)Math.Clamp((int)Math.Round(opacity * 255), 0, 255);
-
-    private static bool TryParseAppearanceColor(string? colorHex, out Color color)
-    {
-        color = Colors.White;
-        var normalized = JsonAppSettingsStore.NormalizeAppearanceColorHex(colorHex);
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return false;
-        }
-
-        color = Color.FromRgb(
-            Convert.ToByte(normalized.Substring(1, 2), 16),
-            Convert.ToByte(normalized.Substring(3, 2), 16),
-            Convert.ToByte(normalized.Substring(5, 2), 16));
-        return true;
-    }
-
     private void UpdateMonitoringInteractionState()
     {
         OnPropertyChanged(nameof(IsMonitoringRunning));
@@ -3195,6 +2248,14 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
             _ => "Info"
         };
 
+    private static string GetStatusCenterLevel(AppLogLevel level) =>
+        level switch
+        {
+            AppLogLevel.Warning => "Warning",
+            AppLogLevel.Error => "Error",
+            _ => "Info"
+        };
+
     private string GetCategoryLabel(string category) =>
         T($"Category.{category.Trim().ToLowerInvariant()}");
 
@@ -3217,79 +2278,6 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
     private string F(string key, params object[] args) => _localizationService.Format(key, args);
 
     private string FormatByKey(string key, params object[] args) => args.Length == 0 ? T(key) : F(key, args);
-
-    private void LoadSettings()
-    {
-        var settings = _settingsStore.Current;
-        _pauseSchedulingAfterUnsafeExit = settings.PauseSchedulingAfterUnsafeExit;
-        _autoRollbackOnUnsafeExit = settings.AutoRollbackOnUnsafeExit;
-        _disableProfileAfterRepeatedUnsafeRuns = settings.DisableProfileAfterRepeatedUnsafeRuns;
-        _unsafeRunThreshold = Math.Max(1, settings.UnsafeRunThreshold);
-        _monitoringIntervalSeconds = NormalizeMonitoringInterval(settings.MonitoringIntervalSeconds);
-        _autoStartMonitoringOnLaunch = settings.AutoStartMonitoringOnLaunch;
-        _launchAtStartup = _startupRegistrationService.IsEnabled() || settings.LaunchAtStartup;
-        _languageTransitionAnimationEnabled = settings.LanguageTransitionAnimationEnabled;
-        _languageTransitionDurationSeconds = JsonAppSettingsStore.NormalizeLanguageTransitionDuration(settings.LanguageTransitionDurationSeconds);
-        _appearanceBackgroundImageEnabled = settings.AppearanceBackgroundImageEnabled;
-        _selectedAppearanceBackgroundMode = JsonAppSettingsStore.NormalizeAppearanceBackgroundMode(settings.AppearanceBackgroundMode);
-        _appearanceBackgroundImagePath = settings.AppearanceBackgroundImagePath ?? string.Empty;
-        _appearanceSidebarBackgroundImagePath = settings.AppearanceSidebarBackgroundImagePath ?? string.Empty;
-        _appearanceContentBackgroundImagePath = settings.AppearanceContentBackgroundImagePath ?? string.Empty;
-        _appearanceBackgroundImageOpacity = JsonAppSettingsStore.NormalizeAppearanceBackgroundImageOpacity(settings.AppearanceBackgroundImageOpacity);
-        _selectedAppearanceThemeKey = JsonAppSettingsStore.NormalizeAppearanceThemeKey(settings.AppearanceThemeKey);
-        _appearanceSurfaceColorHex = JsonAppSettingsStore.NormalizeAppearanceColorHex(settings.AppearanceSurfaceColorHex);
-        _appearanceBorderColorHex = JsonAppSettingsStore.NormalizeAppearanceColorHex(settings.AppearanceBorderColorHex);
-        _appearanceWindowOverlayOpacity = JsonAppSettingsStore.NormalizeAppearanceWindowOverlayOpacity(settings.AppearanceWindowOverlayOpacity);
-        _appearanceCardOpacity = JsonAppSettingsStore.NormalizeAppearanceCardOpacity(settings.AppearanceCardOpacity);
-        LanguageTransitionCoordinator.IsEnabled = _languageTransitionAnimationEnabled;
-    }
-
-    private void NotifySettingsChanged()
-    {
-        OnPropertyChanged(nameof(PauseSchedulingAfterUnsafeExit));
-        OnPropertyChanged(nameof(AutoRollbackOnUnsafeExit));
-        OnPropertyChanged(nameof(DisableProfileAfterRepeatedUnsafeRuns));
-        OnPropertyChanged(nameof(UnsafeRunThreshold));
-        OnPropertyChanged(nameof(MonitoringIntervalSeconds));
-        OnPropertyChanged(nameof(AutoStartMonitoringOnLaunch));
-        OnPropertyChanged(nameof(LaunchAtStartup));
-        OnPropertyChanged(nameof(LanguageTransitionAnimationEnabled));
-        OnPropertyChanged(nameof(LanguageTransitionDurationSeconds));
-        OnPropertyChanged(nameof(AppearanceBackgroundImageEnabled));
-        OnPropertyChanged(nameof(SelectedAppearanceBackgroundMode));
-        OnPropertyChanged(nameof(AppearanceBackgroundImagePath));
-        OnPropertyChanged(nameof(AppearanceSidebarBackgroundImagePath));
-        OnPropertyChanged(nameof(AppearanceSidebarBackgroundPreviewPath));
-        OnPropertyChanged(nameof(AppearanceContentBackgroundImagePath));
-        OnPropertyChanged(nameof(AppearanceBackgroundImageDisplayPath));
-        OnPropertyChanged(nameof(AppearanceSplitBackgroundSummary));
-        OnPropertyChanged(nameof(AppearanceBackgroundImageOpacity));
-        OnPropertyChanged(nameof(AppearanceBackgroundImageVisibility));
-        OnPropertyChanged(nameof(AppearanceSidebarBackgroundImageVisibility));
-        OnPropertyChanged(nameof(AppearanceSidebarBackgroundPreviewVisibility));
-        OnPropertyChanged(nameof(AppearanceSidebarAdjustmentVisibility));
-        OnPropertyChanged(nameof(HasPendingAppearanceSidebarBackground));
-        OnPropertyChanged(nameof(AppearanceContentBackgroundImageVisibility));
-        OnPropertyChanged(nameof(AppearanceContentBackgroundPreviewPath));
-        OnPropertyChanged(nameof(AppearanceContentBackgroundPreviewVisibility));
-        OnPropertyChanged(nameof(AppearanceContentAdjustmentVisibility));
-        OnPropertyChanged(nameof(HasPendingAppearanceContentBackground));
-        OnPropertyChanged(nameof(SelectedAppearanceThemeKey));
-        OnPropertyChanged(nameof(AppearanceSurfaceColorHex));
-        OnPropertyChanged(nameof(AppearanceBorderColorHex));
-        OnPropertyChanged(nameof(AppearanceWindowOverlayOpacity));
-        OnPropertyChanged(nameof(AppearanceCardOpacity));
-        OnPropertyChanged(nameof(AppearanceWindowOverlayBrush));
-        OnPropertyChanged(nameof(AppearancePreviewOverlayBrush));
-        OnPropertyChanged(nameof(AppearanceStatus));
-    }
-
-    private static int NormalizeMonitoringInterval(int intervalSeconds) =>
-        intervalSeconds switch
-        {
-            1 or 2 or 5 or 10 => intervalSeconds,
-            _ => 2
-        };
 
     private void OnLanguageChanged(object? sender, EventArgs e)
     {
@@ -3314,11 +2302,65 @@ public sealed class MainWindowViewModel : ObservableObject, IAsyncDisposable
 
     private void InsertEntry(LogEntry entry)
     {
-        RecentLogs.Insert(0, entry);
+        RecentLogs.Insert(0, CreateLogEntryItem(entry));
         while (RecentLogs.Count > 120)
         {
             RecentLogs.RemoveAt(RecentLogs.Count - 1);
         }
+
+        PublishUserLogEvent(entry);
+    }
+
+    private LogEntryItemViewModel CreateLogEntryItem(LogEntry entry)
+    {
+        var hasLocalizedUserMessage = entry.Audience == LogAudience.User &&
+                                      entry.EventCode != UserEventCode.None;
+        return new LogEntryItemViewModel
+        {
+            Entry = entry,
+            Level = T($"Enum.AppLogLevel.{entry.Level}"),
+            Audience = T($"Enum.LogAudience.{entry.Audience}"),
+            Message = hasLocalizedUserMessage
+                ? FormatByKey($"UserEvent.{entry.EventCode}", entry.Arguments?.ToArray() ?? [])
+                : entry.Message
+        };
+    }
+
+    private void RelocalizeRecentLogs()
+    {
+        var entries = RecentLogs.Select(item => item.Entry).ToArray();
+        RecentLogs.Clear();
+        foreach (var entry in entries)
+        {
+            RecentLogs.Add(CreateLogEntryItem(entry));
+        }
+    }
+
+    private void PublishUserLogEvent(LogEntry entry)
+    {
+        if (entry.Audience != LogAudience.User || entry.EventCode == UserEventCode.None)
+        {
+            return;
+        }
+
+        var messageKey = $"UserEvent.{entry.EventCode}";
+        var args = entry.Arguments?.ToArray() ?? [];
+        var duplicateCutoff = entry.Timestamp - TimeSpan.FromSeconds(10);
+        if (_statusCenterEvents.Any(item =>
+                item.Timestamp >= duplicateCutoff &&
+                string.Equals(item.MessageKey, messageKey, StringComparison.Ordinal) &&
+                item.Args.Select(static value => value?.ToString())
+                    .SequenceEqual(args.Select(static value => value?.ToString()))))
+        {
+            return;
+        }
+
+        AddStatusCenterEvent(
+            "Section.RuntimeStatus",
+            messageKey,
+            args,
+            GetStatusCenterLevel(entry.Level),
+            entry.Timestamp);
     }
 
     private sealed record StatusCenterEvent(

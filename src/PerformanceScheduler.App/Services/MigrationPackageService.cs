@@ -4,7 +4,9 @@ using System.Text.Json.Serialization;
 using PerformanceScheduler.App.Settings;
 using PerformanceScheduler.Core.Abstractions;
 using PerformanceScheduler.Core.Models;
+using PerformanceScheduler.Core.Profiles.Validation;
 using PerformanceScheduler.Core.Services;
+using PerformanceScheduler.Infrastructure.Persistence;
 
 namespace PerformanceScheduler.App.Services;
 
@@ -56,8 +58,7 @@ public sealed class MigrationPackageService
         };
 
         EnsureParentDirectory(destinationPath);
-        await using var stream = File.Create(destinationPath);
-        await JsonSerializer.SerializeAsync(stream, package, _jsonOptions, cancellationToken);
+        await AtomicFile.WriteJsonAsync(destinationPath, package, _jsonOptions, cancellationToken);
     }
 
     public async Task<MigrationPackageImportPreview> PreviewImportAsync(
@@ -91,11 +92,28 @@ public sealed class MigrationPackageService
         if (options.ImportProfiles)
         {
             var existingProfiles = await _profileManager.LoadProfilesAsync(cancellationToken);
+            var profilesToImport = package.Profiles
+                .Select(profile => ProfileSafetyValidator.PrepareUntrustedImport(profile, sourcePath))
+                .ToArray();
             var existingIds = existingProfiles
                 .Select(static profile => profile.Id)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var prospectiveProfiles = existingProfiles.ToDictionary(
+                profile => profile.Id,
+                StringComparer.OrdinalIgnoreCase);
+            foreach (var profile in profilesToImport)
+            {
+                if (!options.OverwriteExistingProfiles && existingIds.Contains(profile.Id))
+                {
+                    continue;
+                }
 
-            foreach (var profile in package.Profiles)
+                prospectiveProfiles[profile.Id] = profile;
+            }
+
+            ProfileSafetyValidator.EnsureLibraryCanPersist(prospectiveProfiles.Values, sourcePath);
+
+            foreach (var profile in profilesToImport)
             {
                 if (!options.OverwriteExistingProfiles && existingIds.Contains(profile.Id))
                 {
@@ -130,6 +148,25 @@ public sealed class MigrationPackageService
                 settings.MonitoringIntervalSeconds = imported.MonitoringIntervalSeconds;
                 settings.AutoStartMonitoringOnLaunch = imported.AutoStartMonitoringOnLaunch;
                 settings.LaunchAtStartup = imported.LaunchAtStartup;
+                settings.LanguageTransitionAnimationEnabled = imported.LanguageTransitionAnimationEnabled;
+                settings.LanguageTransitionDurationSeconds = imported.LanguageTransitionDurationSeconds;
+                settings.UiMotionEnabled = imported.UiMotionEnabled;
+                settings.UiMotionStaggerEnabled = imported.UiMotionStaggerEnabled;
+                settings.UiMotionDurationMilliseconds = imported.UiMotionDurationMilliseconds;
+                settings.AppearanceBackgroundMode = imported.AppearanceBackgroundMode;
+                settings.AppearanceBackgroundImageOpacity = imported.AppearanceBackgroundImageOpacity;
+                settings.AppearanceThemeKey = imported.AppearanceThemeKey;
+                settings.AppearanceSurfaceColorHex = imported.AppearanceSurfaceColorHex;
+                settings.AppearanceBorderColorHex = imported.AppearanceBorderColorHex;
+                settings.AppearanceWindowOverlayOpacity = imported.AppearanceWindowOverlayOpacity;
+                settings.AppearanceCardOpacity = imported.AppearanceCardOpacity;
+
+                // Version 1 migration packages do not embed image assets. Never import
+                // source-machine paths that may be invalid or expose personal folders.
+                settings.AppearanceBackgroundImageEnabled = false;
+                settings.AppearanceBackgroundImagePath = null;
+                settings.AppearanceSidebarBackgroundImagePath = null;
+                settings.AppearanceContentBackgroundImagePath = null;
             });
             importedSettings = true;
         }
@@ -148,8 +185,26 @@ public sealed class MigrationPackageService
         CancellationToken cancellationToken)
     {
         await using var stream = File.OpenRead(sourcePath);
-        return await JsonSerializer.DeserializeAsync<MigrationPackage>(stream, _jsonOptions, cancellationToken)
-               ?? new MigrationPackage();
+        var package = await JsonSerializer.DeserializeAsync<MigrationPackage>(stream, _jsonOptions, cancellationToken)
+                      ?? throw new JsonException("The migration package is empty.");
+        ConfigurationSchemaPolicy.EnsureMigrationPackageSupported(package.SchemaVersion, sourcePath);
+        foreach (var profile in package.Profiles)
+        {
+            ConfigurationSchemaPolicy.ValidateProfile(profile, sourcePath);
+            ProfileSafetyValidator.EnsureCanPersist(profile, sourcePath);
+        }
+
+        ProfileSafetyValidator.EnsureLibraryCanPersist(package.Profiles, sourcePath);
+
+        foreach (var deviceStrategyPackage in package.DeviceStrategyPackages)
+        {
+            ConfigurationSchemaPolicy.ValidateDeviceStrategyPackage(deviceStrategyPackage, sourcePath);
+            ProfileSafetyValidator.EnsureLibraryCanPersist(
+                deviceStrategyPackage.Profiles.Select(item => item.Profile),
+                sourcePath);
+        }
+
+        return package;
     }
 
     private static void EnsureParentDirectory(string path)
@@ -174,11 +229,13 @@ public sealed class MigrationPackageService
             LaunchAtStartup = settings.LaunchAtStartup,
             LanguageTransitionAnimationEnabled = settings.LanguageTransitionAnimationEnabled,
             LanguageTransitionDurationSeconds = settings.LanguageTransitionDurationSeconds,
-            AppearanceBackgroundImageEnabled = settings.AppearanceBackgroundImageEnabled,
+            UiMotionEnabled = settings.UiMotionEnabled,
+            UiMotionStaggerEnabled = settings.UiMotionStaggerEnabled,
+            UiMotionDurationMilliseconds = settings.UiMotionDurationMilliseconds,
+            // External tool paths are machine-local and never leave the source device.
+            PresentMonExecutablePath = null,
+            AppearanceBackgroundImageEnabled = false,
             AppearanceBackgroundMode = settings.AppearanceBackgroundMode,
-            AppearanceBackgroundImagePath = settings.AppearanceBackgroundImagePath,
-            AppearanceSidebarBackgroundImagePath = settings.AppearanceSidebarBackgroundImagePath,
-            AppearanceContentBackgroundImagePath = settings.AppearanceContentBackgroundImagePath,
             AppearanceBackgroundImageOpacity = settings.AppearanceBackgroundImageOpacity,
             AppearanceThemeKey = settings.AppearanceThemeKey,
             AppearanceSurfaceColorHex = settings.AppearanceSurfaceColorHex,

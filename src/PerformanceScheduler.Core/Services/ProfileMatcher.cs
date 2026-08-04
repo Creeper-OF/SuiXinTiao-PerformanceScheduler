@@ -21,7 +21,8 @@ public sealed class ProfileMatcher
                 continue;
             }
 
-            var (score, reason) = ScoreProfile(app, profile);
+            var reasons = ScoreProfile(app, profile);
+            var score = reasons.Sum(reason => reason.ScoreContribution);
             if (score <= 0)
             {
                 continue;
@@ -29,65 +30,142 @@ public sealed class ProfileMatcher
 
             if (bestMatch is null || score > bestMatch.Score)
             {
-                bestMatch = new ProfileMatchResult(profile, score, reason);
+                bestMatch = new ProfileMatchResult(
+                    profile,
+                    score,
+                    BuildLegacyReason(reasons),
+                    reasons);
             }
         }
 
-        return bestMatch ?? (globalDefaultProfile is null
-            ? null
-            : new ProfileMatchResult(globalDefaultProfile, 1, "Global default fallback"));
+        if (bestMatch is not null)
+        {
+            return bestMatch;
+        }
+
+        if (globalDefaultProfile is null)
+        {
+            return null;
+        }
+
+        ProfileMatchReason[] fallbackReasons =
+        [
+            new ProfileMatchReason
+            {
+                Kind = ProfileMatchReasonKind.GlobalDefaultFallback,
+                ScoreContribution = 1,
+                RuleValue = globalDefaultProfile.Name,
+                ActualValue = app.ProcessName
+            }
+        ];
+        return new ProfileMatchResult(
+            globalDefaultProfile,
+            score: 1,
+            reason: "Global default fallback",
+            reasons: fallbackReasons);
     }
 
-    private static (int Score, string Reason) ScoreProfile(FocusedAppContext app, PerformanceProfile profile)
+    private static IReadOnlyList<ProfileMatchReason> ScoreProfile(
+        FocusedAppContext app,
+        PerformanceProfile profile)
     {
         if (!MatchesPowerSource(app, profile))
         {
-            return (0, string.Empty);
+            return Array.Empty<ProfileMatchReason>();
         }
 
-        var score = 0;
-        var reasons = new List<string>();
+        var reasons = new List<ProfileMatchReason>();
         var executableName = Path.GetFileName(app.ExecutablePath ?? string.Empty);
 
         if (profile.PowerSourceMode != PowerSourceMode.Any)
         {
-            score += 15;
-            reasons.Add("Power source matched");
+            reasons.Add(CreateReason(
+                ProfileMatchReasonKind.PowerSource,
+                15,
+                profile.PowerSourceMode.ToString(),
+                app.PowerSourceMode.ToString()));
         }
 
-        if (profile.Match.ExecutableNames.Any(name => EqualsIgnoreCase(name, executableName)))
+        var executableRule = profile.Match.ExecutableNames.FirstOrDefault(
+            name => EqualsIgnoreCase(name, executableName));
+        if (executableRule is not null)
         {
-            score += 100;
-            reasons.Add("Executable matched");
+            reasons.Add(CreateReason(
+                ProfileMatchReasonKind.ExecutableName,
+                100,
+                executableRule,
+                executableName));
         }
 
-        if (profile.Match.ProcessNames.Any(name => EqualsIgnoreCase(name, app.ProcessName)))
+        var processRule = profile.Match.ProcessNames.FirstOrDefault(
+            name => EqualsIgnoreCase(name, app.ProcessName));
+        if (processRule is not null)
         {
-            score += 80;
-            reasons.Add("Process name matched");
+            reasons.Add(CreateReason(
+                ProfileMatchReasonKind.ProcessName,
+                80,
+                processRule,
+                app.ProcessName));
         }
 
-        if (profile.Match.WindowTitleContains.Any(fragment => ContainsIgnoreCase(app.WindowTitle, fragment)))
+        var titleRule = profile.Match.WindowTitleContains.FirstOrDefault(
+            fragment => ContainsIgnoreCase(app.WindowTitle, fragment));
+        if (titleRule is not null)
         {
-            score += 40;
-            reasons.Add("Window title matched");
+            reasons.Add(CreateReason(
+                ProfileMatchReasonKind.WindowTitle,
+                40,
+                titleRule,
+                app.WindowTitle));
         }
 
         if (profile.Match.Classifications.Contains(app.Classification))
         {
-            score += 30;
-            reasons.Add("Classification matched");
+            reasons.Add(CreateReason(
+                ProfileMatchReasonKind.Classification,
+                30,
+                app.Classification.ToString(),
+                app.Classification.ToString()));
         }
 
         if (profile.TargetClassification != ProcessClassification.Unknown &&
             profile.TargetClassification == app.Classification)
         {
-            score += 20;
-            reasons.Add("Target classification matched");
+            reasons.Add(CreateReason(
+                ProfileMatchReasonKind.TargetClassification,
+                20,
+                profile.TargetClassification.ToString(),
+                app.Classification.ToString()));
         }
 
-        return (score, string.Join(", ", reasons));
+        return reasons;
     }
+
+    private static ProfileMatchReason CreateReason(
+        ProfileMatchReasonKind kind,
+        int scoreContribution,
+        string ruleValue,
+        string actualValue) =>
+        new()
+        {
+            Kind = kind,
+            ScoreContribution = scoreContribution,
+            RuleValue = ruleValue,
+            ActualValue = actualValue
+        };
+
+    private static string BuildLegacyReason(IEnumerable<ProfileMatchReason> reasons) =>
+        string.Join(", ", reasons.Select(reason => reason.Kind switch
+        {
+            ProfileMatchReasonKind.PowerSource => "Power source matched",
+            ProfileMatchReasonKind.ExecutableName => "Executable matched",
+            ProfileMatchReasonKind.ProcessName => "Process name matched",
+            ProfileMatchReasonKind.WindowTitle => "Window title matched",
+            ProfileMatchReasonKind.Classification => "Classification matched",
+            ProfileMatchReasonKind.TargetClassification => "Target classification matched",
+            ProfileMatchReasonKind.GlobalDefaultFallback => "Global default fallback",
+            _ => reason.Kind.ToString()
+        }));
 
     private static bool EqualsIgnoreCase(string left, string right) =>
         string.Equals(left?.Trim(), right?.Trim(), StringComparison.OrdinalIgnoreCase);

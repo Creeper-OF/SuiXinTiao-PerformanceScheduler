@@ -2,14 +2,17 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using PerformanceScheduler.Core.Abstractions;
 using PerformanceScheduler.Core.Models;
+using PerformanceScheduler.Core.Profiles.Validation;
+using PerformanceScheduler.Core.Services;
 
 namespace PerformanceScheduler.Infrastructure.Persistence;
 
-public sealed class JsonProfileManager : IProfileManager
+public sealed class JsonProfileManager : IProfileManager, IConfigurationLoadIssueSource
 {
     private readonly string _profilesDirectory;
     private readonly string _historyDirectory;
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly List<ConfigurationLoadIssue> _loadIssues = new();
 
     public JsonProfileManager(string profilesDirectory)
     {
@@ -24,6 +27,8 @@ public sealed class JsonProfileManager : IProfileManager
         };
     }
 
+    public IReadOnlyList<ConfigurationLoadIssue> LoadIssues => _loadIssues.ToArray();
+
     public async Task<IReadOnlyList<PerformanceProfile>> LoadProfilesAsync(CancellationToken cancellationToken = default)
     {
         if (!Directory.Exists(_profilesDirectory))
@@ -32,6 +37,7 @@ public sealed class JsonProfileManager : IProfileManager
         }
 
         var profiles = new List<PerformanceProfile>();
+        _loadIssues.Clear();
         foreach (var path in GetProfilePaths())
         {
             var profile = await ReadSingleProfileAsync(path, cancellationToken);
@@ -46,14 +52,23 @@ public sealed class JsonProfileManager : IProfileManager
 
     public async Task SaveProfileAsync(PerformanceProfile profile, CancellationToken cancellationToken = default)
     {
+        ConfigurationSchemaPolicy.ValidateProfile(profile);
+        ProfileSafetyValidator.EnsureCanPersist(profile);
         Directory.CreateDirectory(_profilesDirectory);
         var path = GetProfilePath(profile);
+        var existingProfiles = await LoadProfilesForValidationAsync(cancellationToken);
+        ProfileSafetyValidator.EnsureLibraryCanPersist(
+            existingProfiles
+                .Where(existing => !string.Equals(existing.Id, profile.Id, StringComparison.OrdinalIgnoreCase))
+                .Append(profile));
         var existingCurrent = await FindByIdAsync(profile.Id, cancellationToken);
 
         if (existingCurrent is not null)
         {
             await ArchiveRevisionAsync(existingCurrent.Value.Profile, existingCurrent.Value.Path, cancellationToken);
         }
+
+        await AtomicFile.WriteJsonAsync(path, profile, _jsonOptions, cancellationToken);
 
         foreach (var existingPath in GetProfilePaths())
         {
@@ -68,9 +83,6 @@ public sealed class JsonProfileManager : IProfileManager
                 File.Delete(existingPath);
             }
         }
-
-        await using var stream = File.Create(path);
-        await JsonSerializer.SerializeAsync(stream, profile, _jsonOptions, cancellationToken);
     }
 
     public async Task<IReadOnlyList<ProfileRevisionInfo>> LoadProfileHistoryAsync(string profileId, CancellationToken cancellationToken = default)
@@ -128,8 +140,7 @@ public sealed class JsonProfileManager : IProfileManager
     public async Task ExportProfilesAsync(string destinationPath, CancellationToken cancellationToken = default)
     {
         var profiles = await LoadProfilesAsync(cancellationToken);
-        await using var stream = File.Create(destinationPath);
-        await JsonSerializer.SerializeAsync(stream, profiles, _jsonOptions, cancellationToken);
+        await AtomicFile.WriteJsonAsync(destinationPath, profiles, _jsonOptions, cancellationToken);
     }
 
     public async Task ImportProfilesAsync(string sourcePath, bool overwriteExisting, CancellationToken cancellationToken = default)
@@ -147,6 +158,33 @@ public sealed class JsonProfileManager : IProfileManager
 
         foreach (var profile in importedProfiles)
         {
+            ConfigurationSchemaPolicy.ValidateProfile(profile, sourcePath);
+        }
+
+        var profilesToImport = importedProfiles
+            .Select(profile => ProfileSafetyValidator.PrepareUntrustedImport(profile, sourcePath))
+            .ToArray();
+
+        ProfileSafetyValidator.EnsureLibraryCanPersist(profilesToImport, sourcePath);
+
+        var existingProfiles = await LoadProfilesForValidationAsync(cancellationToken);
+        var prospectiveProfiles = existingProfiles.ToDictionary(
+            profile => profile.Id,
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var profile in profilesToImport)
+        {
+            if (!overwriteExisting && prospectiveProfiles.ContainsKey(profile.Id))
+            {
+                continue;
+            }
+
+            prospectiveProfiles[profile.Id] = profile;
+        }
+
+        ProfileSafetyValidator.EnsureLibraryCanPersist(prospectiveProfiles.Values, sourcePath);
+
+        foreach (var profile in profilesToImport)
+        {
             var destinationPath = GetProfilePath(profile);
             if (!overwriteExisting && await FindByIdAsync(profile.Id, cancellationToken) is not null)
             {
@@ -159,6 +197,21 @@ public sealed class JsonProfileManager : IProfileManager
 
     private IEnumerable<string> GetProfilePaths() =>
         Directory.GetFiles(_profilesDirectory, "*.json", SearchOption.TopDirectoryOnly);
+
+    private async Task<IReadOnlyList<PerformanceProfile>> LoadProfilesForValidationAsync(
+        CancellationToken cancellationToken)
+    {
+        var profiles = new List<PerformanceProfile>();
+        foreach (var path in GetProfilePaths())
+        {
+            if (await ReadSingleProfileAsync(path, cancellationToken) is { } profile)
+            {
+                profiles.Add(profile);
+            }
+        }
+
+        return profiles;
+    }
 
     private async Task<(string Path, PerformanceProfile Profile)?> FindByIdAsync(string profileId, CancellationToken cancellationToken)
     {
@@ -196,9 +249,14 @@ public sealed class JsonProfileManager : IProfileManager
         var revisionId = $"{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}-v{profile.Version}";
         var destinationPath = Path.Combine(profileHistoryDirectory, $"{revisionId}.json");
 
-        await using var sourceStream = File.OpenRead(sourcePath);
-        await using var destinationStream = File.Create(destinationPath);
-        await sourceStream.CopyToAsync(destinationStream, cancellationToken);
+        await AtomicFile.WriteAsync(
+            destinationPath,
+            async (destinationStream, token) =>
+            {
+                await using var sourceStream = File.OpenRead(sourcePath);
+                await sourceStream.CopyToAsync(destinationStream, token);
+            },
+            cancellationToken);
     }
 
     private async Task<PerformanceProfile?> ReadSingleProfileAsync(string path, CancellationToken cancellationToken)
@@ -206,7 +264,10 @@ public sealed class JsonProfileManager : IProfileManager
         try
         {
             await using var stream = File.OpenRead(path);
-            return await JsonSerializer.DeserializeAsync<PerformanceProfile>(stream, _jsonOptions, cancellationToken);
+            var profile = await JsonSerializer.DeserializeAsync<PerformanceProfile>(stream, _jsonOptions, cancellationToken);
+            return profile is null
+                ? null
+                : ValidateLoadedProfile(profile, path);
         }
         catch (OperationCanceledException)
         {
@@ -216,6 +277,31 @@ public sealed class JsonProfileManager : IProfileManager
         {
             return null;
         }
+        catch (UnsupportedConfigurationSchemaException exception)
+        {
+            _loadIssues.Add(new ConfigurationLoadIssue
+            {
+                SourcePath = path,
+                Message = exception.Message
+            });
+            return null;
+        }
+        catch (InvalidProfileConfigurationException exception)
+        {
+            _loadIssues.Add(new ConfigurationLoadIssue
+            {
+                SourcePath = path,
+                Message = exception.Message
+            });
+            return null;
+        }
+    }
+
+    private static PerformanceProfile ValidateLoadedProfile(PerformanceProfile profile, string path)
+    {
+        ConfigurationSchemaPolicy.ValidateProfile(profile, path);
+        ProfileSafetyValidator.EnsureCanPersist(profile, path);
+        return profile;
     }
 
     private static DateTimeOffset TryParseRevisionTimestamp(string revisionId)

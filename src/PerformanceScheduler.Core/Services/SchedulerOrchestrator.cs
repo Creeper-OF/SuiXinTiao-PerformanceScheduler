@@ -10,13 +10,15 @@ public sealed class SchedulerOrchestrator
     private readonly ICapabilityDetector _capabilityDetector;
     private readonly IPowerStatusProvider _powerStatusProvider;
     private readonly IPowerPlanManager _powerPlanManager;
-    private readonly IPriorityManager _priorityManager;
     private readonly IProfileManager _profileManager;
     private readonly IRollbackManager _rollbackManager;
     private readonly IMetricsCollector _metricsCollector;
     private readonly IRuntimeStateStore _runtimeStateStore;
     private readonly IAppLogger _logger;
+    private readonly ISchedulerActionExecutor _actionExecutor;
     private readonly ProfileMatcher _profileMatcher;
+    private readonly SchedulingSessionCoordinator _sessionCoordinator;
+    private readonly Func<DateTimeOffset> _utcNow;
 
     public SchedulerOrchestrator(
         IForegroundWatcher foregroundWatcher,
@@ -30,26 +32,43 @@ public sealed class SchedulerOrchestrator
         IMetricsCollector metricsCollector,
         IRuntimeStateStore runtimeStateStore,
         IAppLogger logger,
-        ProfileMatcher? profileMatcher = null)
+        ProfileMatcher? profileMatcher = null,
+        Func<DateTimeOffset>? utcNow = null,
+        TimeSpan? failureRetryBaseDelay = null,
+        TimeSpan? failureRetryMaxDelay = null,
+        ISchedulerActionExecutor? actionExecutor = null)
     {
         _foregroundWatcher = foregroundWatcher;
         _processInspector = processInspector;
         _capabilityDetector = capabilityDetector;
         _powerStatusProvider = powerStatusProvider;
         _powerPlanManager = powerPlanManager;
-        _priorityManager = priorityManager;
         _profileManager = profileManager;
         _rollbackManager = rollbackManager;
         _metricsCollector = metricsCollector;
         _runtimeStateStore = runtimeStateStore;
         _logger = logger;
+        _actionExecutor = actionExecutor ?? new SchedulerActionExecutor(
+            powerPlanManager,
+            priorityManager,
+            rollbackManager,
+            logger);
         _profileMatcher = profileMatcher ?? new ProfileMatcher();
+        _utcNow = utcNow ?? (() => DateTimeOffset.UtcNow);
+        _sessionCoordinator = new SchedulingSessionCoordinator(
+            failureRetryBaseDelay,
+            failureRetryMaxDelay);
     }
 
     public Task<CapabilitySnapshot> GetCapabilitiesAsync(CancellationToken cancellationToken = default) =>
         _capabilityDetector.DetectAsync(cancellationToken);
 
     public async Task<SchedulerRunResult> EvaluateForegroundAsync(CancellationToken cancellationToken = default)
+        => await _sessionCoordinator.RunExclusiveAsync(
+            () => EvaluateForegroundCoreAsync(cancellationToken),
+            cancellationToken);
+
+    private async Task<SchedulerRunResult> EvaluateForegroundCoreAsync(CancellationToken cancellationToken)
     {
         var capabilities = await _capabilityDetector.DetectAsync(cancellationToken);
         var foregroundWindow = await _foregroundWatcher.GetForegroundWindowAsync(cancellationToken);
@@ -84,11 +103,105 @@ public sealed class SchedulerOrchestrator
 
         var profiles = await _profileManager.LoadProfilesAsync(cancellationToken);
         var match = _profileMatcher.Match(app, profiles);
-        PowerPlanInfo? activePowerPlan = await _powerPlanManager.GetActivePlanAsync(cancellationToken);
-        var previousPowerPlan = activePowerPlan;
-        PowerPlanAdvancedState? previousAdvancedPowerSettings = null;
+        var requestedSession = match is null
+            ? null
+            : SchedulingSessionIdentity.Create(app, match.Profile, powerSourceMode);
+
+        if (_sessionCoordinator.RequiresTransition(requestedSession))
+        {
+            var restored = await RestoreActiveSessionAsync(cancellationToken);
+            if (!restored)
+            {
+                return await PersistResultAsync(new SchedulerRunResult
+                {
+                    ActiveApp = app,
+                    MatchResult = match,
+                    Capabilities = capabilities,
+                    PowerSourceMode = powerSourceMode,
+                    Success = false,
+                    FailureRecoveryCompleted = false,
+                    Summary = "The previous scheduling session could not be fully restored. New adjustments were blocked."
+                }, cancellationToken);
+            }
+        }
+
+        if (requestedSession is not null && _sessionCoordinator.ActiveSession is null &&
+            await _rollbackManager.GetLastKnownStateAsync(cancellationToken) is not null)
+        {
+            const string message = "Pending rollback state exists. New adjustments were blocked until recovery succeeds.";
+            _logger.PublishUserEvent(
+                UserEventCode.PendingRollbackBlocked,
+                AppLogLevel.Warning,
+                message);
+            return await PersistResultAsync(new SchedulerRunResult
+            {
+                ActiveApp = app,
+                MatchResult = match,
+                Capabilities = capabilities,
+                PowerSourceMode = powerSourceMode,
+                Success = false,
+                FailureRecoveryCompleted = false,
+                Summary = message
+            }, cancellationToken);
+        }
+
+        PowerPlanInfo? activePowerPlan = capabilities.SupportsPowerPlanSwitching
+            ? await _powerPlanManager.GetActivePlanAsync(cancellationToken)
+            : capabilities.AvailablePowerPlans.FirstOrDefault(plan => plan.IsActive);
+
+        if (requestedSession is not null &&
+            _sessionCoordinator.GetActiveFailureCooldown(requestedSession, _utcNow()) is { } failureCooldown)
+        {
+            var message = $"Profile {match!.Profile.Name} is waiting until " +
+                          $"{failureCooldown.RetryAfter.LocalDateTime:G} before retrying after " +
+                          $"{failureCooldown.ConsecutiveFailureCount} consecutive failure(s).";
+            _logger.PublishUserEvent(
+                UserEventCode.ProfileRetryDeferred,
+                AppLogLevel.Warning,
+                message,
+                match.Profile.Name,
+                failureCooldown.RetryAfter.LocalDateTime,
+                failureCooldown.ConsecutiveFailureCount);
+            return await PersistResultAsync(new SchedulerRunResult
+            {
+                ActiveApp = app,
+                MatchResult = match,
+                ActivePowerPlan = activePowerPlan,
+                Capabilities = capabilities,
+                PowerSourceMode = powerSourceMode,
+                Success = false,
+                IsRetryDeferred = true,
+                ConsecutiveFailureCount = failureCooldown.ConsecutiveFailureCount,
+                RetryAfter = failureCooldown.RetryAfter,
+                FailureRecoveryCompleted = true,
+                Summary = message
+            }, cancellationToken);
+        }
+
+        if (requestedSession is not null && _sessionCoordinator.IsCurrent(requestedSession))
+        {
+            var currentMetrics = capabilities.SupportsMetricsCollection
+                ? await _metricsCollector.CollectAsync(app, cancellationToken)
+                : null;
+            return await PersistResultAsync(new SchedulerRunResult
+            {
+                TransactionId = _sessionCoordinator.ActiveTransactionId,
+                ActiveApp = app,
+                MatchResult = match,
+                ActivePowerPlan = activePowerPlan,
+                Metrics = currentMetrics,
+                Capabilities = capabilities,
+                PowerSourceMode = powerSourceMode,
+                Success = true,
+                Summary = $"Profile {match!.Profile.Name} remains active for {app.ProcessName}."
+            }, cancellationToken);
+        }
+
+        var transactionId = requestedSession is null ? (Guid?)null : Guid.NewGuid();
         PriorityAdjustmentResult? priorityResult = null;
-        IReadOnlyList<BackgroundProcessAdjustmentResult> backgroundAdjustments = Array.Empty<BackgroundProcessAdjustmentResult>();
+        IReadOnlyList<BackgroundProcessAdjustmentResult> backgroundAdjustments =
+            Array.Empty<BackgroundProcessAdjustmentResult>();
+        IReadOnlyList<SchedulerActionResult> actionResults = Array.Empty<SchedulerActionResult>();
 
         if (match is null)
         {
@@ -96,189 +209,142 @@ public sealed class SchedulerOrchestrator
         }
         else
         {
-            var originalPriorities = new Dictionary<int, PriorityLevel>();
-            var originalForegroundPriority = await _priorityManager.TryGetPriorityAsync(app.ProcessId, cancellationToken);
-            if (originalForegroundPriority is { } foregroundPriority &&
-                foregroundPriority != match.Profile.Priority.ForegroundPriority)
+            var execution = await _actionExecutor.ExecuteAsync(new SchedulerActionExecutionRequest
             {
-                originalPriorities[app.ProcessId] = foregroundPriority;
-            }
-
-            var targetAdvancedPowerSourceMode = ResolveAdvancedPowerSourceMode(match.Profile, powerSourceMode);
-            var advancedPowerPlanScheme = match.Profile.PowerPlan.SchemeGuid ?? activePowerPlan?.SchemeGuid;
-            previousAdvancedPowerSettings = await CaptureAdvancedPowerSettingsAsync(
-                match,
-                advancedPowerPlanScheme,
-                targetAdvancedPowerSourceMode,
-                cancellationToken);
-            var backgroundBaselines = await _priorityManager.CaptureBackgroundPolicyBaselinesAsync(
-                app,
-                match.Profile,
-                cancellationToken);
-            foreach (var baseline in backgroundBaselines)
-            {
-                originalPriorities.TryAdd(baseline.ProcessId, baseline.PreviousPriority);
-            }
-
-            await CaptureRollbackStateAsync(
-                match,
-                previousPowerPlan,
-                previousAdvancedPowerSettings,
-                originalPriorities,
-                cancellationToken);
-
-            activePowerPlan = await ApplyPowerPlanAsync(match, activePowerPlan, cancellationToken);
-            await ApplyAdvancedPowerSettingsAsync(match, activePowerPlan, targetAdvancedPowerSourceMode, cancellationToken);
-            priorityResult = await _priorityManager.ApplyForegroundBoostAsync(app, match.Profile, cancellationToken);
-            backgroundAdjustments = await _priorityManager.ApplyBackgroundPoliciesAsync(app, match.Profile, cancellationToken);
-
-            foreach (var adjustment in backgroundAdjustments.Where(result => result.Status == SchedulerActionStatus.Applied))
-            {
-                _logger.Info(
-                    $"Background policy applied: {adjustment.ProcessName} ({adjustment.ProcessId}) -> {adjustment.AppliedPriority} [{adjustment.Category}]");
-            }
-
-            _logger.Info($"Profile matched: {match.Profile.Name} (score: {match.Score}).");
+                TransactionId = transactionId!.Value,
+                ActiveApp = app,
+                Match = match,
+                Capabilities = capabilities,
+                PowerSourceMode = powerSourceMode,
+                ActivePowerPlan = activePowerPlan
+            }, cancellationToken);
+            activePowerPlan = execution.ActivePowerPlan;
+            priorityResult = execution.PriorityChange;
+            backgroundAdjustments = execution.BackgroundAdjustments;
+            actionResults = execution.Actions;
         }
 
-        var metrics = await _metricsCollector.CollectAsync(app, cancellationToken);
+        var failedActions = actionResults
+            .Where(action => action.Status == SchedulerActionStatus.Failed)
+            .ToArray();
+        var runSucceeded = failedActions.Length == 0;
+        var failureRecoveryCompleted = true;
+        SchedulingFailureState? failureState = null;
+        if (match is not null && !runSucceeded)
+        {
+            failureRecoveryCompleted = await RestoreFailedRunAsync(
+                transactionId!.Value,
+                cancellationToken);
+            failureState = _sessionCoordinator.MarkFailed(requestedSession!, _utcNow());
+        }
+        else if (match is not null && capabilities.SupportsRollback)
+        {
+            _sessionCoordinator.MarkActive(requestedSession!, transactionId!.Value);
+        }
+
+        var metrics = capabilities.SupportsMetricsCollection
+            ? await _metricsCollector.CollectAsync(app, cancellationToken)
+            : null;
         var summary = match is null
             ? $"Foreground app {app.ProcessName} has no matching profile."
-            : BuildSummary(app, match, backgroundAdjustments);
+            : runSucceeded
+                ? SchedulerResultSummaryBuilder.Build(app, match, backgroundAdjustments, capabilities, priorityResult)
+                : SchedulerResultSummaryBuilder.BuildFailure(
+                    app,
+                    match,
+                    failedActions,
+                    failureRecoveryCompleted);
 
         return await PersistResultAsync(new SchedulerRunResult
         {
+            TransactionId = transactionId,
             ActiveApp = app,
             MatchResult = match,
             ActivePowerPlan = activePowerPlan,
             PriorityChange = priorityResult,
             BackgroundAdjustments = backgroundAdjustments,
+            Actions = actionResults,
             Metrics = metrics,
             Capabilities = capabilities,
             PowerSourceMode = powerSourceMode,
-            Success = true,
+            Success = runSucceeded,
+            ConsecutiveFailureCount = failureState?.ConsecutiveFailureCount ?? 0,
+            RetryAfter = failureState?.RetryAfter,
+            FailureRecoveryCompleted = runSucceeded ? null : failureRecoveryCompleted,
             Summary = summary
         }, cancellationToken);
     }
 
     public async Task RestoreAsync(CancellationToken cancellationToken = default)
+        => await _sessionCoordinator.RunExclusiveAsync(
+            async () =>
+            {
+                await _rollbackManager.RollbackAsync(cancellationToken);
+                _sessionCoordinator.Reset();
+                _logger.Info("Rollback requested.");
+            },
+            cancellationToken);
+
+    private async Task<bool> RestoreActiveSessionAsync(CancellationToken cancellationToken)
     {
         await _rollbackManager.RollbackAsync(cancellationToken);
-        _logger.Info("Rollback requested.");
+        _sessionCoordinator.ClearActive();
+
+        if (await _rollbackManager.GetLastKnownStateAsync(cancellationToken) is null)
+        {
+            _logger.PublishUserEvent(
+                UserEventCode.PreviousSessionRestored,
+                AppLogLevel.Information,
+                "Previous scheduling session restored before applying the next profile.");
+            return true;
+        }
+
+        _logger.PublishUserEvent(
+            UserEventCode.PreviousSessionRollbackIncomplete,
+            AppLogLevel.Warning,
+            "Previous scheduling session has unresolved rollback items.");
+        return false;
     }
 
-    private async Task<PowerPlanInfo?> ApplyPowerPlanAsync(
-        ProfileMatchResult match,
-        PowerPlanInfo? activePowerPlan,
+    private async Task<bool> RestoreFailedRunAsync(
+        Guid transactionId,
         CancellationToken cancellationToken)
     {
-        var desiredScheme = match.Profile.PowerPlan.SchemeGuid;
-        if (desiredScheme is Guid targetScheme &&
-            (activePowerPlan is null || activePowerPlan.SchemeGuid != targetScheme))
+        try
         {
-            var switched = await _powerPlanManager.SetActivePlanAsync(targetScheme, cancellationToken);
-            if (switched)
+            _logger.Warn($"Scheduling transaction {transactionId} failed. Attempting immediate rollback.");
+            await _rollbackManager.RollbackAsync(cancellationToken);
+            if (await _rollbackManager.GetLastKnownStateAsync(cancellationToken) is null)
             {
-                _logger.Info($"Power plan switched to {targetScheme}.");
-                return await _powerPlanManager.GetActivePlanAsync(cancellationToken);
+                _logger.PublishUserEvent(
+                    UserEventCode.FailedRunRollbackCompleted,
+                    AppLogLevel.Information,
+                    $"Scheduling transaction {transactionId} was rolled back after failure.",
+                    transactionId);
+                return true;
             }
 
-            _logger.Warn($"Power plan switch failed for {targetScheme}.");
+            _logger.PublishUserEvent(
+                UserEventCode.FailedRunRollbackIncomplete,
+                AppLogLevel.Warning,
+                $"Scheduling transaction {transactionId} still has unresolved rollback items.",
+                transactionId);
+            return false;
         }
-
-        return activePowerPlan;
-    }
-
-    private async Task<PowerPlanAdvancedState?> CaptureAdvancedPowerSettingsAsync(
-        ProfileMatchResult match,
-        Guid? schemeGuid,
-        PowerSourceMode targetPowerSourceMode,
-        CancellationToken cancellationToken)
-    {
-        if (!match.Profile.PowerPlan.Advanced.HasChanges || schemeGuid is not { } targetSchemeGuid)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            return null;
+            throw;
         }
-
-        var previousAdvancedSettings = await _powerPlanManager.GetAdvancedSettingsAsync(
-            targetSchemeGuid,
-            targetPowerSourceMode,
-            cancellationToken);
-        if (previousAdvancedSettings is null)
+        catch (Exception exception)
         {
-            _logger.Warn($"Advanced power settings skipped because the current values could not be captured for {targetPowerSourceMode}.");
-            return null;
+            _logger.Error($"Automatic rollback failed for scheduling transaction {transactionId}.", exception);
+            _logger.PublishUserEvent(
+                UserEventCode.AutomaticRollbackFailed,
+                AppLogLevel.Error,
+                $"Automatic rollback failed for scheduling transaction {transactionId}.",
+                transactionId);
+            return false;
         }
-
-        return previousAdvancedSettings;
-    }
-
-    private async Task ApplyAdvancedPowerSettingsAsync(
-        ProfileMatchResult match,
-        PowerPlanInfo? activePowerPlan,
-        PowerSourceMode targetPowerSourceMode,
-        CancellationToken cancellationToken)
-    {
-        if (!match.Profile.PowerPlan.Advanced.HasChanges || activePowerPlan is null)
-        {
-            return;
-        }
-
-        var applied = await _powerPlanManager.ApplyAdvancedSettingsAsync(
-            activePowerPlan.SchemeGuid,
-            targetPowerSourceMode,
-            match.Profile.PowerPlan.Advanced,
-            cancellationToken);
-
-        if (applied)
-        {
-            _logger.Info($"Advanced power settings applied for {targetPowerSourceMode}.");
-            return;
-        }
-
-        _logger.Warn($"Advanced power settings failed for {targetPowerSourceMode}.");
-    }
-
-    private async Task CaptureRollbackStateAsync(
-        ProfileMatchResult match,
-        PowerPlanInfo? previousPowerPlan,
-        PowerPlanAdvancedState? previousAdvancedPowerSettings,
-        IReadOnlyDictionary<int, PriorityLevel> originalPriorities,
-        CancellationToken cancellationToken)
-    {
-        var shouldCaptureState = match.Profile.PowerPlan.RestoreOnExit ||
-                                 previousAdvancedPowerSettings is not null ||
-                                 originalPriorities.Count > 0;
-
-        if (!shouldCaptureState)
-        {
-            return;
-        }
-
-        await _rollbackManager.CaptureAsync(new SchedulerState
-        {
-            PreviousPowerPlan = previousPowerPlan,
-            PreviousAdvancedPowerSettings = previousAdvancedPowerSettings,
-            OriginalPriorities = new Dictionary<int, PriorityLevel>(originalPriorities)
-        }, cancellationToken);
-    }
-
-    private static PowerSourceMode ResolveAdvancedPowerSourceMode(
-        PerformanceProfile profile,
-        PowerSourceMode currentPowerSourceMode) =>
-        profile.PowerSourceMode == PowerSourceMode.Any
-            ? currentPowerSourceMode
-            : profile.PowerSourceMode;
-
-    private static string BuildSummary(
-        FocusedAppContext app,
-        ProfileMatchResult match,
-        IReadOnlyList<BackgroundProcessAdjustmentResult> backgroundAdjustments)
-    {
-        var appliedCount = backgroundAdjustments.Count(result => result.Status == SchedulerActionStatus.Applied);
-        return appliedCount == 0
-            ? $"Applied profile {match.Profile.Name} to {app.ProcessName}."
-            : $"Applied profile {match.Profile.Name} to {app.ProcessName} and adjusted {appliedCount} background process(es).";
     }
 
     private async Task<SchedulerRunResult> PersistResultAsync(

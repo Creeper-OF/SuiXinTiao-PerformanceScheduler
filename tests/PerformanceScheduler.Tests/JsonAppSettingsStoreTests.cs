@@ -61,6 +61,18 @@ public sealed class JsonAppSettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public void Update_PersistsNormalizedPresentMonExecutablePath()
+    {
+        var settingsPath = Path.Combine(_tempDirectory, "settings.json");
+        var store = new JsonAppSettingsStore(settingsPath);
+
+        store.Update(settings => settings.PresentMonExecutablePath = "  \"C:\\Tools\\PresentMon.exe\"  ");
+        var reloadedStore = new JsonAppSettingsStore(settingsPath);
+
+        Assert.Equal("C:\\Tools\\PresentMon.exe", reloadedStore.Current.PresentMonExecutablePath);
+    }
+
+    [Fact]
     public void Current_NormalizesAppearanceColorHex()
     {
         var settingsPath = Path.Combine(_tempDirectory, "settings.json");
@@ -75,6 +87,44 @@ public sealed class JsonAppSettingsStoreTests : IDisposable
 
         Assert.Equal("#FFF4E8", store.Current.AppearanceSurfaceColorHex);
         Assert.Equal(string.Empty, store.Current.AppearanceBorderColorHex);
+    }
+
+    [Theory]
+    [InlineData(20, 120)]
+    [InlineData(320, 320)]
+    [InlineData(5000, 800)]
+    public void Current_NormalizesUiMotionDuration(double configuredValue, double expectedValue)
+    {
+        var settingsPath = Path.Combine(_tempDirectory, "settings.json");
+        File.WriteAllText(settingsPath, $$"""
+        {
+          "uiMotionDurationMilliseconds": {{configuredValue}}
+        }
+        """);
+
+        var store = new JsonAppSettingsStore(settingsPath);
+
+        Assert.Equal(expectedValue, store.Current.UiMotionDurationMilliseconds);
+    }
+
+    [Fact]
+    public void Update_PersistsUiMotionPreferences()
+    {
+        var settingsPath = Path.Combine(_tempDirectory, "settings.json");
+        var store = new JsonAppSettingsStore(settingsPath);
+
+        store.Update(settings =>
+        {
+            settings.UiMotionEnabled = false;
+            settings.UiMotionStaggerEnabled = false;
+            settings.UiMotionDurationMilliseconds = 440;
+        });
+        var reloadedStore = new JsonAppSettingsStore(settingsPath);
+
+        Assert.False(reloadedStore.Current.UiMotionEnabled);
+        Assert.False(reloadedStore.Current.UiMotionStaggerEnabled);
+        Assert.Equal(440, reloadedStore.Current.UiMotionDurationMilliseconds);
+        Assert.Empty(Directory.GetFiles(_tempDirectory, "*.tmp", SearchOption.TopDirectoryOnly));
     }
 
     public void Dispose()

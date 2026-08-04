@@ -20,6 +20,8 @@ public sealed class ProfileDraftViewModel : ObservableObject, INotifyDataErrorIn
     private string _processNamesText = string.Empty;
     private string _windowTitleContainsText = string.Empty;
     private PriorityLevel _foregroundPriority = PriorityLevel.AboveNormal;
+    private bool _lowerBackgroundProcesses;
+    private bool _preferEfficiencyModeForBackground;
     private bool _restoreOnExit = true;
     private string _notes = string.Empty;
     private GpuPreferenceMode _gpuMode = GpuPreferenceMode.DriverDefault;
@@ -185,6 +187,18 @@ public sealed class ProfileDraftViewModel : ObservableObject, INotifyDataErrorIn
         set => SetProperty(ref _foregroundPriority, value);
     }
 
+    public bool LowerBackgroundProcesses
+    {
+        get => _lowerBackgroundProcesses;
+        set => SetProperty(ref _lowerBackgroundProcesses, value);
+    }
+
+    public bool PreferEfficiencyModeForBackground
+    {
+        get => _preferEfficiencyModeForBackground;
+        set => SetProperty(ref _preferEfficiencyModeForBackground, value);
+    }
+
     public bool RestoreOnExit
     {
         get => _restoreOnExit;
@@ -271,6 +285,8 @@ public sealed class ProfileDraftViewModel : ObservableObject, INotifyDataErrorIn
         ProcessNamesText = string.Join(Environment.NewLine, profile.Match.ProcessNames);
         WindowTitleContainsText = string.Join(Environment.NewLine, profile.Match.WindowTitleContains);
         ForegroundPriority = profile.Priority.ForegroundPriority;
+        LowerBackgroundProcesses = profile.Priority.LowerBackgroundProcesses;
+        PreferEfficiencyModeForBackground = profile.Priority.PreferEfficiencyModeForBackground;
         RestoreOnExit = profile.PowerPlan.RestoreOnExit;
         ProcessorMaxStatePercentText = profile.PowerPlan.Advanced.ProcessorMaxStatePercent?.ToString() ?? string.Empty;
         GpuMode = profile.Gpu.Mode;
@@ -303,6 +319,8 @@ public sealed class ProfileDraftViewModel : ObservableObject, INotifyDataErrorIn
         ProcessNamesText = string.Empty;
         WindowTitleContainsText = string.Empty;
         ForegroundPriority = PriorityLevel.AboveNormal;
+        LowerBackgroundProcesses = false;
+        PreferEfficiencyModeForBackground = false;
         RestoreOnExit = true;
         ProcessorMaxStatePercentText = string.Empty;
         GpuMode = GpuPreferenceMode.DriverDefault;
@@ -350,7 +368,9 @@ public sealed class ProfileDraftViewModel : ObservableObject, INotifyDataErrorIn
             },
             Priority = new PriorityPreference
             {
-                ForegroundPriority = ForegroundPriority
+                ForegroundPriority = ForegroundPriority,
+                LowerBackgroundProcesses = LowerBackgroundProcesses,
+                PreferEfficiencyModeForBackground = PreferEfficiencyModeForBackground
             },
             Gpu = new GpuPreference
             {

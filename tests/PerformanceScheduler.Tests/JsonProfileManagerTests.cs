@@ -1,5 +1,7 @@
 using PerformanceScheduler.Core.Models;
 using PerformanceScheduler.Infrastructure.Persistence;
+using PerformanceScheduler.Core.Profiles.Validation;
+using PerformanceScheduler.Core.Services;
 
 namespace PerformanceScheduler.Tests;
 
@@ -20,7 +22,8 @@ public sealed class JsonProfileManagerTests : IDisposable
         var profile = new PerformanceProfile
         {
             Id = "stable-id",
-            Name = "First Name"
+            Name = "First Name",
+            Match = MatchProcess("stable")
         };
 
         await manager.SaveProfileAsync(profile);
@@ -39,7 +42,8 @@ public sealed class JsonProfileManagerTests : IDisposable
         await manager.SaveProfileAsync(new PerformanceProfile
         {
             Id = "valid-id",
-            Name = "Valid Profile"
+            Name = "Valid Profile",
+            Match = MatchProcess("valid")
         });
         await File.WriteAllTextAsync(Path.Combine(_tempDirectory, "broken.json"), "{ this is not json");
 
@@ -47,6 +51,38 @@ public sealed class JsonProfileManagerTests : IDisposable
 
         var profile = Assert.Single(profiles);
         Assert.Equal("valid-id", profile.Id);
+    }
+
+    [Fact]
+    public async Task LoadProfilesAsync_SkipsFutureSchemaAndReportsIssue()
+    {
+        await File.WriteAllTextAsync(
+            Path.Combine(_tempDirectory, "future.json"),
+            """
+            { "schemaVersion": 2, "id": "future", "name": "Future Profile" }
+            """);
+        var manager = new JsonProfileManager(_tempDirectory);
+
+        var profiles = await manager.LoadProfilesAsync();
+
+        Assert.Empty(profiles);
+        var issue = Assert.Single(manager.LoadIssues);
+        Assert.Contains("schema version 2", issue.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ImportProfilesAsync_RejectsFutureSchema()
+    {
+        var sourcePath = Path.Combine(_tempDirectory, "future-import.json");
+        await File.WriteAllTextAsync(
+            sourcePath,
+            """
+            { "schemaVersion": 2, "id": "future", "name": "Future Profile" }
+            """);
+        var manager = new JsonProfileManager(_tempDirectory);
+
+        await Assert.ThrowsAsync<UnsupportedConfigurationSchemaException>(() =>
+            manager.ImportProfilesAsync(sourcePath, overwriteExisting: true));
     }
 
     [Fact]
@@ -106,6 +142,7 @@ public sealed class JsonProfileManagerTests : IDisposable
         {
             Id = "same-id",
             Name = "Existing Name",
+            Match = MatchProcess("existing"),
             Notes = "keep me"
         });
 
@@ -117,6 +154,7 @@ public sealed class JsonProfileManagerTests : IDisposable
               "name": "Imported Different Name",
               "version": 1,
               "isEnabled": true,
+              "match": { "processNames": [ "game" ] },
               "notes": "do not import"
             }
             """;
@@ -131,6 +169,83 @@ public sealed class JsonProfileManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveProfileAsync_RejectsRealTimePriorityWithoutWritingAFile()
+    {
+        var manager = new JsonProfileManager(_tempDirectory);
+        var profile = new PerformanceProfile
+        {
+            Id = "unsafe-realtime",
+            Name = "Unsafe RealTime",
+            Match = MatchProcess("unsafe"),
+            Priority = new PriorityPreference { ForegroundPriority = PriorityLevel.RealTime }
+        };
+
+        var exception = await Assert.ThrowsAsync<InvalidProfileConfigurationException>(() =>
+            manager.SaveProfileAsync(profile));
+
+        Assert.Contains(exception.Issues, issue => issue.Code == "RealTimePriorityBlocked");
+        Assert.Empty(Directory.GetFiles(_tempDirectory, "*.json"));
+    }
+
+    [Fact]
+    public async Task ImportProfilesAsync_ValidatesEntirePayloadBeforeWriting()
+    {
+        var manager = new JsonProfileManager(_tempDirectory);
+        var sourcePath = Path.Combine(_tempDirectory, "unsafe-import.json");
+        await File.WriteAllTextAsync(
+            sourcePath,
+            """
+            [
+              {
+                "schemaVersion": 1,
+                "id": "safe-first",
+                "name": "Safe First",
+                "match": { "processNames": [ "safe" ] }
+              },
+              {
+                "schemaVersion": 1,
+                "id": "unsafe-second",
+                "name": "Unsafe Second",
+                "match": { "processNames": [ "unsafe" ] },
+                "priority": { "foregroundPriority": "RealTime" }
+              }
+            ]
+            """);
+
+        await Assert.ThrowsAsync<InvalidProfileConfigurationException>(() =>
+            manager.ImportProfilesAsync(sourcePath, overwriteExisting: true));
+
+        Assert.Empty(await manager.LoadProfilesAsync());
+    }
+
+    [Fact]
+    public async Task ImportProfilesAsync_DisablesHighRiskProfileUntilReviewed()
+    {
+        var manager = new JsonProfileManager(_tempDirectory);
+        var sourcePath = Path.Combine(_tempDirectory, "high-risk-import.json");
+        await File.WriteAllTextAsync(
+            sourcePath,
+            $$"""
+            {
+              "schemaVersion": 1,
+              "id": "high-risk",
+              "name": "High Risk",
+              "isEnabled": true,
+              "match": { "processNames": [ "game" ] },
+              "powerPlan": {
+                "schemeGuid": "{{Guid.NewGuid()}}",
+                "restoreOnExit": false
+              }
+            }
+            """);
+
+        await manager.ImportProfilesAsync(sourcePath, overwriteExisting: true);
+
+        var profile = Assert.Single(await manager.LoadProfilesAsync());
+        Assert.False(profile.IsEnabled);
+    }
+
+    [Fact]
     public async Task SaveProfileAsync_CreatesHistoryRevisionWhenUpdatingExistingProfile()
     {
         var manager = new JsonProfileManager(_tempDirectory);
@@ -139,6 +254,7 @@ public sealed class JsonProfileManagerTests : IDisposable
             Id = "history-id",
             Name = "History Profile",
             Version = 1,
+            Match = MatchProcess("history"),
             Notes = "initial"
         };
 
@@ -162,6 +278,7 @@ public sealed class JsonProfileManagerTests : IDisposable
             Id = "rollback-id",
             Name = "Rollback Profile",
             Version = 2,
+            Match = MatchProcess("rollback"),
             Notes = "before rollback"
         };
 
@@ -186,4 +303,9 @@ public sealed class JsonProfileManagerTests : IDisposable
             Directory.Delete(_tempDirectory, recursive: true);
         }
     }
+
+    private static ProfileMatchCriteria MatchProcess(string processName) => new()
+    {
+        ProcessNames = new[] { processName }
+    };
 }

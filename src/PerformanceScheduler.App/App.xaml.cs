@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.IO;
 using System.Windows;
 using PerformanceScheduler.App.Localization;
@@ -9,6 +10,8 @@ namespace PerformanceScheduler.App;
 public partial class App : Application
 {
     private AppRuntime? _runtime;
+    private bool _shutdownCompleted;
+    private bool _shutdownInProgress;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -21,6 +24,7 @@ public partial class App : Application
 
             var mainWindow = new MainWindow(_runtime.MainWindowViewModel);
             MainWindow = mainWindow;
+            mainWindow.Closing += MainWindow_Closing;
             mainWindow.Show();
 
             _runtime.MainWindowViewModel.ApplyStartupRecoveryResult(_runtime.StartupRecoveryResult);
@@ -35,18 +39,56 @@ public partial class App : Application
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
 
+            if (_runtime is not null)
+            {
+                await TryShutdownRuntimeAsync();
+            }
+
             Shutdown(-1);
         }
     }
 
-    protected override async void OnExit(ExitEventArgs e)
+    private async void MainWindow_Closing(object? sender, CancelEventArgs e)
     {
-        if (_runtime is not null)
+        if (_shutdownCompleted)
         {
-            await _runtime.DisposeAsync();
+            return;
         }
 
-        base.OnExit(e);
+        e.Cancel = true;
+        if (_shutdownInProgress)
+        {
+            return;
+        }
+
+        _shutdownInProgress = true;
+        await TryShutdownRuntimeAsync();
+        _shutdownCompleted = true;
+        _shutdownInProgress = false;
+
+        if (sender is Window window)
+        {
+            window.Closing -= MainWindow_Closing;
+            window.Close();
+            return;
+        }
+
+        Shutdown();
+    }
+
+    private async Task TryShutdownRuntimeAsync()
+    {
+        try
+        {
+            if (_runtime is not null)
+            {
+                await _runtime.ShutdownAsync();
+            }
+        }
+        catch (Exception exception)
+        {
+            _runtime?.Logger.Error("Application shutdown cleanup failed.", exception);
+        }
     }
 
     private static JsonLocalizationService CreateFallbackLocalizationService()

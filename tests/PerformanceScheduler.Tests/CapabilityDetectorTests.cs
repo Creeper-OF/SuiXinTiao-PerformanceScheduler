@@ -138,8 +138,6 @@ public sealed class CapabilityDetectorTests
                 ProviderName = ProviderName,
                 SupportsVendorExtensions = true,
                 SupportsApplyPipeline = false,
-                SupportsClockLimit = false,
-                SupportsVoltageControl = false,
                 StatusKey = "Capability.GpuProviderPlaceholder"
             });
         }

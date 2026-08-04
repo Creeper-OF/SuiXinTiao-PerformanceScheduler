@@ -37,7 +37,8 @@ public sealed class JsonDeviceStrategyPackageStoreTests : IDisposable
                     Profile = new PerformanceProfile
                     {
                         Id = "game-profile",
-                        Name = "Game Profile"
+                        Name = "Game Profile",
+                        Match = new ProfileMatchCriteria { ProcessNames = new[] { "game" } }
                     }
                 }
             ]
@@ -84,6 +85,47 @@ public sealed class JsonDeviceStrategyPackageStoreTests : IDisposable
         var packages = await store.LoadPackagesAsync();
 
         Assert.Empty(packages);
+    }
+
+    [Fact]
+    public async Task LoadPackagesAsync_SkipsFutureSchemaAndReportsIssue()
+    {
+        await File.WriteAllTextAsync(
+            Path.Combine(_tempDirectory, "future.json"),
+            """
+            { "schemaVersion": 2, "packageId": "future", "name": "Future Package" }
+            """);
+        var store = new JsonDeviceStrategyPackageStore(_tempDirectory);
+
+        var packages = await store.LoadPackagesAsync();
+
+        Assert.Empty(packages);
+        var issue = Assert.Single(store.LoadIssues);
+        Assert.Contains("schema version 2", issue.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("[null]")]
+    public async Task LoadPackagesAsync_SkipsMissingProfileEntriesAndReportsIssue(string profilesJson)
+    {
+        await File.WriteAllTextAsync(
+            Path.Combine(_tempDirectory, "missing-profile.json"),
+            $$"""
+            {
+              "schemaVersion": 1,
+              "packageId": "missing-profile",
+              "name": "Missing Profile",
+              "profiles": {{profilesJson}}
+            }
+            """);
+        var store = new JsonDeviceStrategyPackageStore(_tempDirectory);
+
+        var packages = await store.LoadPackagesAsync();
+
+        Assert.Empty(packages);
+        var issue = Assert.Single(store.LoadIssues);
+        Assert.Contains("requires a profile", issue.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     public void Dispose()

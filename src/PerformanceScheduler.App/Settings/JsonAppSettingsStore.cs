@@ -1,5 +1,7 @@
 using System.IO;
+using System.Text;
 using System.Text.Json;
+using PerformanceScheduler.Infrastructure.Persistence;
 
 namespace PerformanceScheduler.App.Settings;
 
@@ -26,6 +28,7 @@ public sealed class JsonAppSettingsStore
         copy.UnsafeRunThreshold = Math.Max(1, copy.UnsafeRunThreshold);
         copy.MonitoringIntervalSeconds = NormalizeMonitoringInterval(copy.MonitoringIntervalSeconds);
         copy.LanguageTransitionDurationSeconds = NormalizeLanguageTransitionDuration(copy.LanguageTransitionDurationSeconds);
+        copy.UiMotionDurationMilliseconds = NormalizeUiMotionDuration(copy.UiMotionDurationMilliseconds);
         copy.AppearanceBackgroundImageOpacity = NormalizeAppearanceBackgroundImageOpacity(copy.AppearanceBackgroundImageOpacity);
         copy.AppearanceWindowOverlayOpacity = NormalizeAppearanceWindowOverlayOpacity(copy.AppearanceWindowOverlayOpacity);
         copy.AppearanceCardOpacity = NormalizeAppearanceCardOpacity(copy.AppearanceCardOpacity);
@@ -33,6 +36,7 @@ public sealed class JsonAppSettingsStore
         copy.AppearanceSurfaceColorHex = NormalizeAppearanceColorHex(copy.AppearanceSurfaceColorHex);
         copy.AppearanceBorderColorHex = NormalizeAppearanceColorHex(copy.AppearanceBorderColorHex);
         copy.AppearanceBackgroundMode = NormalizeAppearanceBackgroundMode(copy.AppearanceBackgroundMode);
+        copy.PresentMonExecutablePath = NormalizeOptionalPath(copy.PresentMonExecutablePath);
         Current = copy;
         Save();
     }
@@ -46,11 +50,12 @@ public sealed class JsonAppSettingsStore
                 return new AppSettings();
             }
 
-            var json = File.ReadAllText(_settingsFilePath);
+            var json = File.ReadAllText(_settingsFilePath, Encoding.UTF8);
             var settings = JsonSerializer.Deserialize<AppSettings>(json, _jsonOptions) ?? new AppSettings();
             settings.UnsafeRunThreshold = Math.Max(1, settings.UnsafeRunThreshold);
             settings.MonitoringIntervalSeconds = NormalizeMonitoringInterval(settings.MonitoringIntervalSeconds);
             settings.LanguageTransitionDurationSeconds = NormalizeLanguageTransitionDuration(settings.LanguageTransitionDurationSeconds);
+            settings.UiMotionDurationMilliseconds = NormalizeUiMotionDuration(settings.UiMotionDurationMilliseconds);
             settings.AppearanceBackgroundImageOpacity = NormalizeAppearanceBackgroundImageOpacity(settings.AppearanceBackgroundImageOpacity);
             settings.AppearanceWindowOverlayOpacity = NormalizeAppearanceWindowOverlayOpacity(settings.AppearanceWindowOverlayOpacity);
             settings.AppearanceCardOpacity = NormalizeAppearanceCardOpacity(settings.AppearanceCardOpacity);
@@ -58,6 +63,7 @@ public sealed class JsonAppSettingsStore
             settings.AppearanceSurfaceColorHex = NormalizeAppearanceColorHex(settings.AppearanceSurfaceColorHex);
             settings.AppearanceBorderColorHex = NormalizeAppearanceColorHex(settings.AppearanceBorderColorHex);
             settings.AppearanceBackgroundMode = NormalizeAppearanceBackgroundMode(settings.AppearanceBackgroundMode);
+            settings.PresentMonExecutablePath = NormalizeOptionalPath(settings.PresentMonExecutablePath);
             return settings;
         }
         catch
@@ -68,8 +74,7 @@ public sealed class JsonAppSettingsStore
 
     private void Save()
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(_settingsFilePath)!);
-        File.WriteAllText(_settingsFilePath, JsonSerializer.Serialize(Current, _jsonOptions));
+        AtomicFile.WriteAllText(_settingsFilePath, JsonSerializer.Serialize(Current, _jsonOptions));
     }
 
     private static AppSettings Clone(AppSettings settings) =>
@@ -83,8 +88,12 @@ public sealed class JsonAppSettingsStore
             MonitoringIntervalSeconds = settings.MonitoringIntervalSeconds,
             AutoStartMonitoringOnLaunch = settings.AutoStartMonitoringOnLaunch,
             LaunchAtStartup = settings.LaunchAtStartup,
+            PresentMonExecutablePath = settings.PresentMonExecutablePath,
             LanguageTransitionAnimationEnabled = settings.LanguageTransitionAnimationEnabled,
             LanguageTransitionDurationSeconds = settings.LanguageTransitionDurationSeconds,
+            UiMotionEnabled = settings.UiMotionEnabled,
+            UiMotionStaggerEnabled = settings.UiMotionStaggerEnabled,
+            UiMotionDurationMilliseconds = settings.UiMotionDurationMilliseconds,
             AppearanceBackgroundImageEnabled = settings.AppearanceBackgroundImageEnabled,
             AppearanceBackgroundMode = settings.AppearanceBackgroundMode,
             AppearanceBackgroundImagePath = settings.AppearanceBackgroundImagePath,
@@ -113,6 +122,16 @@ public sealed class JsonAppSettingsStore
         }
 
         return Math.Clamp(durationSeconds, 0.2, 10);
+    }
+
+    public static double NormalizeUiMotionDuration(double durationMilliseconds)
+    {
+        if (double.IsNaN(durationMilliseconds) || double.IsInfinity(durationMilliseconds))
+        {
+            return 280;
+        }
+
+        return Math.Clamp(durationMilliseconds, 120, 800);
     }
 
     public static double NormalizeAppearanceBackgroundImageOpacity(double opacity)
@@ -190,5 +209,8 @@ public sealed class JsonAppSettingsStore
 
         return "unified";
     }
+
+    public static string? NormalizeOptionalPath(string? path) =>
+        string.IsNullOrWhiteSpace(path) ? null : path.Trim().Trim('"');
 
 }

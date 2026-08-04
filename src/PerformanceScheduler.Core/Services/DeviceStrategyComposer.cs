@@ -7,14 +7,14 @@ public sealed class DeviceStrategyComposer
     public DeviceStrategyPackage AddOrReplaceProfile(
         DeviceStrategyPackage package,
         PerformanceProfile profile,
-        DeviceStrategyProfileRole role = DeviceStrategyProfileRole.AppSpecific,
+        DeviceStrategyProfileRole? role = null,
         DeviceStrategyProfileSource source = DeviceStrategyProfileSource.UserAdded,
         string? sourceProfileEntryId = null)
     {
         var item = new DeviceStrategyProfileItem
         {
             ItemId = Guid.NewGuid().ToString("N"),
-            Role = role,
+            Role = role ?? ResolveRole(profile),
             Source = source,
             SourceProfileEntryId = sourceProfileEntryId,
             Profile = profile
@@ -25,7 +25,12 @@ public sealed class DeviceStrategyComposer
             .Append(item)
             .ToArray();
 
-        return package with { Profiles = profiles };
+        return package with
+        {
+            Profiles = profiles,
+            Version = Math.Max(1, package.Version + 1),
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
     }
 
     public DeviceStrategyPackage RemoveProfile(DeviceStrategyPackage package, string profileId)
@@ -34,7 +39,17 @@ public sealed class DeviceStrategyComposer
             .Where(item => !string.Equals(item.Profile.Id, profileId, StringComparison.OrdinalIgnoreCase))
             .ToArray();
 
-        return package with { Profiles = profiles };
+        if (profiles.Length == package.Profiles.Count)
+        {
+            return package;
+        }
+
+        return package with
+        {
+            Profiles = profiles,
+            Version = Math.Max(1, package.Version + 1),
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
     }
 
     public DeviceStrategyPackage CreateFromProfiles(
@@ -49,17 +64,20 @@ public sealed class DeviceStrategyComposer
             Profiles = profiles
                 .Select(profile => new DeviceStrategyProfileItem
                 {
-                    Role = profile.IsGlobalDefault
-                        ? DeviceStrategyProfileRole.GlobalDefault
-                        : profile.PowerSourceMode == PowerSourceMode.Battery
-                            ? DeviceStrategyProfileRole.BatteryDefault
-                            : profile.PowerSourceMode == PowerSourceMode.Ac
-                                ? DeviceStrategyProfileRole.PluggedInDefault
-                                : DeviceStrategyProfileRole.AppSpecific,
+                    Role = ResolveRole(profile),
                     Source = DeviceStrategyProfileSource.UserAdded,
                     Profile = profile
                 })
                 .ToArray()
         };
     }
+
+    private static DeviceStrategyProfileRole ResolveRole(PerformanceProfile profile) =>
+        profile.IsGlobalDefault
+            ? DeviceStrategyProfileRole.GlobalDefault
+            : profile.PowerSourceMode == PowerSourceMode.Battery
+                ? DeviceStrategyProfileRole.BatteryDefault
+                : profile.PowerSourceMode == PowerSourceMode.Ac
+                    ? DeviceStrategyProfileRole.PluggedInDefault
+                    : DeviceStrategyProfileRole.AppSpecific;
 }

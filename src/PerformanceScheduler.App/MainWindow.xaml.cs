@@ -53,7 +53,8 @@ public partial class MainWindow : Window
         {
             Keyboard.ClearFocus();
 
-            var languageAnimationEnabled = viewModel.LanguageTransitionAnimationEnabled;
+            var languageAnimationEnabled = viewModel.LanguageTransitionAnimationEnabled &&
+                                           SystemParameters.ClientAreaAnimation;
             var totalDurationSeconds = Math.Clamp(viewModel.LanguageTransitionDurationSeconds, 0.2, 10);
 
             if (languageAnimationEnabled)

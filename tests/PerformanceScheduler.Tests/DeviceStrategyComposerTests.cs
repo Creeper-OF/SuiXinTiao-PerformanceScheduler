@@ -51,6 +51,23 @@ public sealed class DeviceStrategyComposerTests
 
         var item = Assert.Single(updated.Profiles);
         Assert.Equal("New", item.Profile.Name);
+        Assert.Equal(2, updated.Version);
+    }
+
+    [Fact]
+    public void AddOrReplaceProfile_InfersBatteryRole()
+    {
+        var composer = new DeviceStrategyComposer();
+
+        var updated = composer.AddOrReplaceProfile(
+            new DeviceStrategyPackage(),
+            new PerformanceProfile
+            {
+                Id = "battery",
+                PowerSourceMode = PowerSourceMode.Battery
+            });
+
+        Assert.Equal(DeviceStrategyProfileRole.BatteryDefault, Assert.Single(updated.Profiles).Role);
     }
 
     [Fact]

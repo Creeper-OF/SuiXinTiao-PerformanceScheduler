@@ -1,20 +1,29 @@
 using System.IO;
 using PerformanceScheduler.App.Localization;
+using PerformanceScheduler.App.Services.Diagnostics;
+using PerformanceScheduler.App.Services.Telemetry;
 using PerformanceScheduler.App.Settings;
 using PerformanceScheduler.App.ViewModels;
 using PerformanceScheduler.Core.Abstractions;
 using PerformanceScheduler.Core.Models;
 using PerformanceScheduler.Core.Services;
+using PerformanceScheduler.Core.Telemetry.Models;
+using PerformanceScheduler.Core.Telemetry.Services;
 using PerformanceScheduler.Infrastructure.Capabilities;
 using PerformanceScheduler.Infrastructure.Diagnostics;
 using PerformanceScheduler.Infrastructure.Foreground;
-using PerformanceScheduler.Infrastructure.Gpu;
 using PerformanceScheduler.Infrastructure.Hardware;
+using PerformanceScheduler.Infrastructure.Hardware.Gpu.Composition;
+using PerformanceScheduler.Infrastructure.Hardware.Gpu.Detection;
 using PerformanceScheduler.Infrastructure.Persistence;
 using PerformanceScheduler.Infrastructure.Power;
 using PerformanceScheduler.Infrastructure.Processes;
 using PerformanceScheduler.Infrastructure.Rollback;
 using PerformanceScheduler.Infrastructure.Safety;
+  using PerformanceScheduler.Infrastructure.Telemetry;
+  using PerformanceScheduler.Infrastructure.Telemetry.PresentMon;
+  using PerformanceScheduler.Infrastructure.Telemetry.WindowsGpu;
+  using PerformanceScheduler.Infrastructure.Telemetry.WindowsSystem;
 
 namespace PerformanceScheduler.App.Services;
 
@@ -23,6 +32,8 @@ public sealed class AppRuntime : IAsyncDisposable
     private readonly string _applicationDataRoot;
     private readonly IStartupRecoveryManager _startupRecoveryManager;
     private readonly WindowsStartupRegistrationService _startupRegistrationService;
+    private readonly object _shutdownSync = new();
+    private Task? _shutdownTask;
 
     public AppRuntime()
     {
@@ -32,8 +43,11 @@ public sealed class AppRuntime : IAsyncDisposable
 
         var logsDirectory = Path.Combine(_applicationDataRoot, "logs");
         var runtimeDirectory = Path.Combine(_applicationDataRoot, "runtime");
-        var profilesDirectory = Path.Combine(AppContext.BaseDirectory, "profiles");
-        var deviceStrategiesDirectory = Path.Combine(AppContext.BaseDirectory, "device-strategies");
+        var configurationPaths = ConfigurationStoragePathResolver.Resolve(
+            AppContext.BaseDirectory,
+            _applicationDataRoot);
+        var profilesDirectory = configurationPaths.ProfilesDirectory;
+        var deviceStrategiesDirectory = configurationPaths.DeviceStrategiesDirectory;
         var bundledCommunityCatalogPath = Path.Combine(AppContext.BaseDirectory, "community", "sample-catalog.json");
         var bundledDeviceStrategyCatalogPath = Path.Combine(AppContext.BaseDirectory, "community", "sample-device-strategies.json");
         var localesDirectory = Path.Combine(AppContext.BaseDirectory, "locales");
@@ -54,6 +68,7 @@ public sealed class AppRuntime : IAsyncDisposable
         var priorityManager = new Win32PriorityManager();
         var gpuTuningProviderRegistry = new GpuTuningProviderRegistry();
         var runtimeStateStore = new SqliteRuntimeStateStore(databasePath);
+        TelemetryHistoryStore = new SqliteTelemetryHistoryStore(databasePath);
         var rollbackManager = new FileRollbackManager(rollbackStatePath, powerPlanManager, priorityManager, Logger);
         var profileManager = new JsonProfileManager(profilesDirectory);
         var deviceStrategyPackageStore = new JsonDeviceStrategyPackageStore(deviceStrategiesDirectory);
@@ -77,10 +92,50 @@ public sealed class AppRuntime : IAsyncDisposable
             SettingsStore,
             deviceFingerprintProvider);
 
+        var capabilityDetector = new CapabilityDetector(
+            powerPlanManager,
+            new WindowsGpuCapabilityProvider(),
+            gpuTuningProviderRegistry);
+        DiagnosticPackageService = new DiagnosticPackageService(
+            runtimeStateStore,
+            deviceFingerprintProvider,
+            capabilityDetector,
+            Logger,
+            SettingsStore);
+        var presentMonExecutableLocator = new PresentMonExecutableLocator(
+            AppContext.BaseDirectory,
+            configuredPathProvider: () => SettingsStore.Current.PresentMonExecutablePath);
+        PresentMonConfigurationService = new PresentMonConfigurationService(
+            SettingsStore,
+            presentMonExecutableLocator);
+        TelemetryObservationService = new ForegroundTelemetryObservationService(
+            new Win32ForegroundWatcher(),
+            new Win32ProcessInspector(),
+            new TelemetryCoordinator(
+            [
+                 new ProcessTelemetryProvider(new ProcessMetricsCollector()),
+                 new WindowsGpuProcessTelemetryProvider(new WindowsGpuPerformanceCounterSource()),
+                 new WindowsSystemTelemetryProvider(new WindowsSystemPerformanceCounterSource()),
+                 new PresentMonTelemetryProvider(
+                    presentMonExecutableLocator,
+                    new RunningPresentMonCollectorConflictDetector(),
+                    new PresentMonProcessCaptureRunner(),
+                    new PresentMonCsvParser(),
+                    Path.Combine(runtimeDirectory, "telemetry", "presentmon"))
+            ],
+            new TelemetryCollectionBudget
+            {
+                MinimumSamplingInterval = TimeSpan.FromSeconds(1),
+                MaximumProviderDuration = TimeSpan.FromSeconds(3),
+                MaximumObservationDuration = TimeSpan.FromSeconds(3.5)
+            }),
+            TelemetryHistoryStore,
+            Logger);
+
         SchedulerOrchestrator = new SchedulerOrchestrator(
             new Win32ForegroundWatcher(),
             new Win32ProcessInspector(),
-            new CapabilityDetector(powerPlanManager, new WindowsGpuCapabilityProvider(), gpuTuningProviderRegistry),
+            capabilityDetector,
             new Win32PowerStatusProvider(),
             powerPlanManager,
             priorityManager,
@@ -96,11 +151,15 @@ public sealed class AppRuntime : IAsyncDisposable
             new Win32ForegroundChangeNotifier(),
             deviceFingerprintProvider,
             MigrationPackageService,
+            DiagnosticPackageService,
+            TelemetryObservationService,
+            PresentMonConfigurationService,
             profileManager,
             deviceStrategyPackageStore,
             communityProfileCatalog,
             communityDeviceStrategyCatalog,
             powerPlanManager,
+            runtimeStateStore,
             LocalizationService,
             Logger,
             SettingsStore,
@@ -132,9 +191,17 @@ public sealed class AppRuntime : IAsyncDisposable
 
     public SqliteRuntimeStateStore RuntimeStateStore { get; }
 
+    public SqliteTelemetryHistoryStore TelemetryHistoryStore { get; }
+
     public MainWindowViewModel MainWindowViewModel { get; }
 
     public MigrationPackageService MigrationPackageService { get; }
+
+    public DiagnosticPackageService DiagnosticPackageService { get; }
+
+    public ForegroundTelemetryObservationService TelemetryObservationService { get; }
+
+    public PresentMonConfigurationService PresentMonConfigurationService { get; }
 
     public StartupRecoveryResult StartupRecoveryResult { get; private set; } = new();
 
@@ -142,13 +209,32 @@ public sealed class AppRuntime : IAsyncDisposable
     {
         Directory.CreateDirectory(_applicationDataRoot);
         await RuntimeStateStore.InitializeAsync(cancellationToken);
+        await TelemetryHistoryStore.InitializeAsync(cancellationToken);
         StartupRecoveryResult = await _startupRecoveryManager.BeginSessionAsync(cancellationToken);
         Logger.Info("Application runtime initialized.");
     }
 
-    public async ValueTask DisposeAsync()
+    public Task ShutdownAsync()
     {
-        await MainWindowViewModel.DisposeAsync();
+        lock (_shutdownSync)
+        {
+            return _shutdownTask ??= ShutdownCoreAsync();
+        }
+    }
+
+    public ValueTask DisposeAsync() => new(ShutdownAsync());
+
+    private async Task ShutdownCoreAsync()
+    {
+        try
+        {
+            await MainWindowViewModel.DisposeAsync();
+        }
+        catch (Exception exception)
+        {
+            Logger.Error("Monitoring cleanup failed during application shutdown.", exception);
+        }
+
         await SchedulerOrchestrator.RestoreAsync();
         await _startupRecoveryManager.MarkCleanShutdownAsync();
     }

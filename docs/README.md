@@ -8,6 +8,9 @@
 - [安全基座](safety-baseline.md)：调度事务顺序、回滚状态、进程优先级保护和扩展规则。
 - [公开仓库维护清单](open-source-checklist.md)：公开提交前的隐私、构建产物和文档同步检查。
 - [功能结构](功能结构.md)：当前桌面端的用户任务结构。
+- [PresentMon 可选集成](presentmon-integration.md)：外部帧采集器的安装、权限、会话隔离和降级规则。
+- [Windows GPU 进程遥测](windows-gpu-telemetry.md)：系统性能计数器的数据语义、采样预算和已知限制。
+- [Windows 系统硬件遥测](windows-system-telemetry.md)：CPU 频率、系统热区温度和标准计数器的降级边界。
 
 ## 维护规则
 

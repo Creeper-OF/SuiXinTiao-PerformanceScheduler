@@ -18,9 +18,17 @@ public sealed class AppSettings
 
     public bool LaunchAtStartup { get; set; }
 
+    public string? PresentMonExecutablePath { get; set; }
+
     public bool LanguageTransitionAnimationEnabled { get; set; } = true;
 
     public double LanguageTransitionDurationSeconds { get; set; } = 0.9;
+
+    public bool UiMotionEnabled { get; set; } = true;
+
+    public bool UiMotionStaggerEnabled { get; set; } = true;
+
+    public double UiMotionDurationMilliseconds { get; set; } = 280;
 
     public bool AppearanceBackgroundImageEnabled { get; set; }
 

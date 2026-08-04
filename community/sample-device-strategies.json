@@ -49,7 +49,9 @@
             "powerPlan": {
               "preferredPlanName": "Balanced",
               "restoreOnExit": true,
-              "acProcessorMaxStatePercent": 95
+              "advanced": {
+                "processorMaxStatePercent": 95
+              }
             },
             "priority": {
               "foregroundPriority": "High",
@@ -92,7 +94,9 @@
             "powerPlan": {
               "preferredPlanName": "Balanced",
               "restoreOnExit": true,
-              "dcProcessorMaxStatePercent": 75
+              "advanced": {
+                "processorMaxStatePercent": 75
+              }
             },
             "priority": {
               "foregroundPriority": "AboveNormal",
@@ -101,7 +105,7 @@
             },
             "gpu": {
               "mode": "PreferLowerPower",
-              "clockLimitMHz": 1200,
+              "maxCoreClockMHz": 1200,
               "allowVendorApi": false
             },
             "notes": "Example battery profile; GPU fields are stored but not live-applied yet."

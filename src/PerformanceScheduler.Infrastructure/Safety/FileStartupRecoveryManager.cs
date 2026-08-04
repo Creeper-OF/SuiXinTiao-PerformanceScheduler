@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using PerformanceScheduler.Core.Abstractions;
 using PerformanceScheduler.Core.Models;
+using PerformanceScheduler.Infrastructure.Persistence;
 
 namespace PerformanceScheduler.Infrastructure.Safety;
 
@@ -217,9 +218,7 @@ public sealed class FileStartupRecoveryManager : IStartupRecoveryManager
 
     private async Task SaveAsync<T>(string path, T data, CancellationToken cancellationToken)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        await using var stream = File.Create(path);
-        await JsonSerializer.SerializeAsync(stream, data, _jsonOptions, cancellationToken);
+        await AtomicFile.WriteJsonAsync(path, data, _jsonOptions, cancellationToken);
     }
 
     private sealed class StartupSessionState

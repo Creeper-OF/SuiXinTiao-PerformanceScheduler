@@ -11,7 +11,9 @@ public sealed class ProfileDraftViewModelTests
         var draft = new ProfileDraftViewModel
         {
             Name = "Game Draft",
-            ExecutableNamesText = "game.exe"
+            ExecutableNamesText = "game.exe",
+            LowerBackgroundProcesses = true,
+            PreferEfficiencyModeForBackground = true
         };
 
         draft.BackgroundPolicies.Add(new BackgroundPolicyDraftItemViewModel
@@ -28,6 +30,28 @@ public sealed class ProfileDraftViewModelTests
         Assert.Equal("browser", policy.Category);
         Assert.Equal(PriorityLevel.Idle, policy.TargetPriority);
         Assert.True(policy.PreferEfficiencyMode);
+        Assert.True(profile.Priority.LowerBackgroundProcesses);
+        Assert.True(profile.Priority.PreferEfficiencyModeForBackground);
+    }
+
+    [Fact]
+    public void LoadAndSave_PreservesBackgroundPriorityPreferences()
+    {
+        var source = new PerformanceProfile
+        {
+            Priority = new PriorityPreference
+            {
+                ForegroundPriority = PriorityLevel.High,
+                LowerBackgroundProcesses = true,
+                PreferEfficiencyModeForBackground = true
+            }
+        };
+        var draft = new ProfileDraftViewModel();
+
+        draft.LoadFromProfile(source, Array.Empty<PowerPlanOptionViewModel>());
+        var roundTripped = draft.ToProfile();
+
+        Assert.Equal(source.Priority, roundTripped.Priority);
     }
 
     [Fact]

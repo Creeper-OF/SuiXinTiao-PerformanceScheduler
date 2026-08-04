@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO;
+using System.Text;
 using System.Text.Json;
 using PerformanceScheduler.App.Settings;
 
@@ -65,7 +66,8 @@ public sealed class JsonLocalizationService
         foreach (var path in Directory.GetFiles(_localesDirectory, "*.json", SearchOption.TopDirectoryOnly))
         {
             var languageCode = Path.GetFileNameWithoutExtension(path);
-            var catalog = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path)) ??
+            var catalog = JsonSerializer.Deserialize<Dictionary<string, string>>(
+                              File.ReadAllText(path, Encoding.UTF8)) ??
                           new Dictionary<string, string>();
             _catalogs[languageCode] = catalog;
         }

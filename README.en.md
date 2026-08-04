@@ -28,7 +28,10 @@ The project does not aim to bypass BIOS, GPU driver, or operating-system limits.
 - Startup safety, one-click rollback, and exit-time power plan recovery.
 - JSON-based profile editing, import, export, revision history, and rollback.
 - Device strategy pack structure for future model-specific strategy bundles.
-- Diagnostics for capabilities, device fingerprint, GPU extension readiness, storage, and logs.
+- Diagnostics for capabilities, device fingerprint, GPU extension readiness, run audits, layered logs, read-only foreground observation, and default-redacted support packages.
+- Optional user-installed PresentMon Console capture for average FPS, average frame time, 95th / 99th percentile frame time, and frame sample count, with conflict-aware degradation.
+- Windows system hardware observation for CPU actual frequency and thermal-zone temperature through standard performance counters; thermal-zone values are diagnostic references, not CPU/GPU junction temperatures.
+- Read-only Windows per-process GPU usage and dedicated/shared GPU memory counters; memory values are diagnostic only and do not drive scheduling decisions.
 - Appearance customization for window, sidebar, and main content backgrounds.
 - JSON localization with Simplified Chinese and English.
 
@@ -63,6 +66,8 @@ docs/                                   # Design notes
 - [Project Plan](docs/project-plan.md)
 - [Safety Baseline](docs/safety-baseline.md)
 - [Documentation Index](docs/README.md)
+- [Optional PresentMon Integration (Chinese)](docs/presentmon-integration.md)
+- [Windows System Hardware Telemetry (Chinese)](docs/windows-system-telemetry.md)
 
 ## Contributing
 

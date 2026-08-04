@@ -6,7 +6,15 @@ public sealed record MetricsSnapshot
 
     public double WorkingSetMb { get; init; }
 
+    public double PrivateMemoryMb { get; init; }
+
     public int ThreadCount { get; init; }
 
+    public int HandleCount { get; init; }
+
+    public double? CpuUsagePercent { get; init; }
+
     public TimeSpan TotalProcessorTime { get; init; }
+
+    public bool IsAvailable { get; init; } = true;
 }

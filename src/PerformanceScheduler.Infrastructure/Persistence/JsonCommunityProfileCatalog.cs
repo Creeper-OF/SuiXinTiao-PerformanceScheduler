@@ -2,13 +2,15 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using PerformanceScheduler.Core.Abstractions;
 using PerformanceScheduler.Core.Models;
+using PerformanceScheduler.Core.Services;
 
 namespace PerformanceScheduler.Infrastructure.Persistence;
 
-public sealed class JsonCommunityProfileCatalog : ICommunityProfileCatalog
+public sealed class JsonCommunityProfileCatalog : ICommunityProfileCatalog, IConfigurationLoadIssueSource
 {
     private readonly string _seedCatalogPath;
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly List<ConfigurationLoadIssue> _loadIssues = new();
 
     public JsonCommunityProfileCatalog(string storagePath, string seedCatalogPath)
     {
@@ -23,6 +25,8 @@ public sealed class JsonCommunityProfileCatalog : ICommunityProfileCatalog
     }
 
     public string StoragePath { get; }
+
+    public IReadOnlyList<ConfigurationLoadIssue> LoadIssues => _loadIssues.ToArray();
 
     public async Task<IReadOnlyList<CommunityProfileEntry>> LoadProfilesAsync(CancellationToken cancellationToken = default)
     {
@@ -48,7 +52,27 @@ public sealed class JsonCommunityProfileCatalog : ICommunityProfileCatalog
             return Array.Empty<CommunityProfileEntry>();
         }
 
-        return entries
+        _loadIssues.Clear();
+        var compatibleEntries = new List<CommunityProfileEntry>(entries.Count);
+        foreach (var entry in entries)
+        {
+            try
+            {
+                compatibleEntries.Add(ConfigurationSchemaPolicy.ValidateCommunityProfileEntry(
+                    entry,
+                    $"{StoragePath}#{entry.EntryId}"));
+            }
+            catch (UnsupportedConfigurationSchemaException exception)
+            {
+                _loadIssues.Add(new ConfigurationLoadIssue
+                {
+                    SourcePath = StoragePath,
+                    Message = exception.Message
+                });
+            }
+        }
+
+        return compatibleEntries
             .OrderByDescending(entry => entry.Source == CommunityProfileSource.Official)
             .ThenByDescending(entry => entry.Downloads)
             .ThenBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
@@ -62,8 +86,13 @@ public sealed class JsonCommunityProfileCatalog : ICommunityProfileCatalog
             return;
         }
 
-        await using var sourceStream = File.OpenRead(_seedCatalogPath);
-        await using var destinationStream = File.Create(StoragePath);
-        await sourceStream.CopyToAsync(destinationStream, cancellationToken);
+        await AtomicFile.WriteAsync(
+            StoragePath,
+            async (destinationStream, token) =>
+            {
+                await using var sourceStream = File.OpenRead(_seedCatalogPath);
+                await sourceStream.CopyToAsync(destinationStream, token);
+            },
+            cancellationToken);
     }
 }

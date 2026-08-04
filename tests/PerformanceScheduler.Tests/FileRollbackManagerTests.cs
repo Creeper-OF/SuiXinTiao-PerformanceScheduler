@@ -19,18 +19,40 @@ public sealed class FileRollbackManagerTests : IDisposable
     [Fact]
     public async Task RollbackAsync_ContinuesWhenOneProcessPriorityCannotBeRestored()
     {
-        var powerPlanManager = new FakePowerPlanManager();
-        var priorityManager = new FakePriorityManager(failingProcessId: 10);
+        var originalPowerPlan = new PowerPlanInfo(Guid.NewGuid(), "Balanced", IsActive: false);
+        var appliedPowerPlan = new PowerPlanInfo(Guid.NewGuid(), "High Performance", IsActive: true);
+        var powerPlanManager = new FakePowerPlanManager
+        {
+            CurrentPowerPlan = appliedPowerPlan
+        };
+        var priorityManager = new FakePriorityManager(
+            failingProcessId: 10,
+            currentPriorities: new Dictionary<int, PriorityLevel>
+            {
+                [10] = PriorityLevel.BelowNormal,
+                [20] = PriorityLevel.Idle
+            });
         var logger = new TestLogger();
         var manager = new FileRollbackManager(_statePath, powerPlanManager, priorityManager, logger);
 
         await manager.CaptureAsync(new SchedulerState
         {
-            PreviousPowerPlan = new PowerPlanInfo(Guid.NewGuid(), "Balanced", IsActive: false),
+            PreviousPowerPlan = originalPowerPlan,
+            AppliedPowerPlan = appliedPowerPlan,
             OriginalPriorities = new Dictionary<int, PriorityLevel>
             {
                 [10] = PriorityLevel.Normal,
                 [20] = PriorityLevel.BelowNormal
+            },
+            AppliedPriorities = new Dictionary<int, PriorityLevel>
+            {
+                [10] = PriorityLevel.BelowNormal,
+                [20] = PriorityLevel.Idle
+            },
+            ProcessIdentities = new Dictionary<int, ProcessIdentitySnapshot>
+            {
+                [10] = CreateIdentity(10),
+                [20] = CreateIdentity(20)
             }
         });
 
@@ -38,17 +60,26 @@ public sealed class FileRollbackManagerTests : IDisposable
 
         Assert.True(powerPlanManager.SetActivePlanCalled);
         Assert.Equal(PriorityLevel.BelowNormal, priorityManager.RestoredPriorities[20]);
-        Assert.False(File.Exists(_statePath));
+        Assert.True(File.Exists(_statePath));
         Assert.Contains(logger.Messages, message => message.Contains("PID 10", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
     public async Task RollbackAsync_RestoresAdvancedPowerSettingsWhenCaptured()
     {
-        var powerPlanManager = new FakePowerPlanManager();
+        var schemeGuid = Guid.NewGuid();
+        var appliedState = new PowerPlanAdvancedState
+        {
+            SchemeGuid = schemeGuid,
+            PowerSourceMode = PowerSourceMode.Battery,
+            ProcessorMaxStatePercent = 80
+        };
+        var powerPlanManager = new FakePowerPlanManager
+        {
+            CurrentAdvancedState = appliedState
+        };
         var priorityManager = new FakePriorityManager(failingProcessId: -1);
         var manager = new FileRollbackManager(_statePath, powerPlanManager, priorityManager, new TestLogger());
-        var schemeGuid = Guid.NewGuid();
 
         await manager.CaptureAsync(new SchedulerState
         {
@@ -57,7 +88,8 @@ public sealed class FileRollbackManagerTests : IDisposable
                 SchemeGuid = schemeGuid,
                 PowerSourceMode = PowerSourceMode.Battery,
                 ProcessorMaxStatePercent = 72
-            }
+            },
+            AppliedAdvancedPowerSettings = appliedState
         });
 
         await manager.RollbackAsync();
@@ -69,10 +101,168 @@ public sealed class FileRollbackManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task RollbackAsync_DoesNotOverwritePowerPlanChangedAfterScheduling()
+    {
+        var originalPlan = new PowerPlanInfo(Guid.NewGuid(), "Balanced", IsActive: false);
+        var appliedPlan = new PowerPlanInfo(Guid.NewGuid(), "High Performance", IsActive: false);
+        var userSelectedPlan = new PowerPlanInfo(Guid.NewGuid(), "Power Saver", IsActive: true);
+        var powerPlanManager = new FakePowerPlanManager { CurrentPowerPlan = userSelectedPlan };
+        var logger = new TestLogger();
+        var manager = new FileRollbackManager(
+            _statePath,
+            powerPlanManager,
+            new FakePriorityManager(failingProcessId: -1),
+            logger);
+
+        await manager.CaptureAsync(new SchedulerState
+        {
+            TransactionId = Guid.NewGuid(),
+            PreviousPowerPlan = originalPlan,
+            AppliedPowerPlan = appliedPlan
+        });
+
+        await manager.RollbackAsync();
+
+        Assert.False(powerPlanManager.SetActivePlanCalled);
+        Assert.False(File.Exists(_statePath));
+        Assert.Contains(logger.Messages, message =>
+            message.Contains("changed after scheduling", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task RollbackAsync_DoesNotOverwriteAdvancedSettingsChangedAfterScheduling()
+    {
+        var schemeGuid = Guid.NewGuid();
+        var originalState = CreateAdvancedState(schemeGuid, 100);
+        var appliedState = CreateAdvancedState(schemeGuid, 80);
+        var userState = CreateAdvancedState(schemeGuid, 65);
+        var powerPlanManager = new FakePowerPlanManager { CurrentAdvancedState = userState };
+        var logger = new TestLogger();
+        var manager = new FileRollbackManager(
+            _statePath,
+            powerPlanManager,
+            new FakePriorityManager(failingProcessId: -1),
+            logger);
+
+        await manager.CaptureAsync(new SchedulerState
+        {
+            TransactionId = Guid.NewGuid(),
+            PreviousAdvancedPowerSettings = originalState,
+            AppliedAdvancedPowerSettings = appliedState
+        });
+
+        await manager.RollbackAsync();
+
+        Assert.Null(powerPlanManager.RestoredAdvancedState);
+        Assert.False(File.Exists(_statePath));
+        Assert.Contains(logger.Messages, message =>
+            message.Contains("changed after scheduling", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task CaptureAsync_MergesWithExistingUnresolvedState()
+    {
+        var manager = new FileRollbackManager(
+            _statePath,
+            new FakePowerPlanManager(),
+            new FakePriorityManager(failingProcessId: -1),
+            new TestLogger());
+        var originalPlan = new PowerPlanInfo(Guid.NewGuid(), "Balanced", IsActive: false);
+
+        await manager.CaptureAsync(new SchedulerState
+        {
+            OriginalPriorities = new Dictionary<int, PriorityLevel>
+            {
+                [10] = PriorityLevel.Normal
+            }
+        });
+
+        await manager.CaptureAsync(new SchedulerState
+        {
+            PreviousPowerPlan = originalPlan,
+            OriginalPriorities = new Dictionary<int, PriorityLevel>
+            {
+                [10] = PriorityLevel.High,
+                [20] = PriorityLevel.BelowNormal
+            }
+        });
+
+        var mergedState = await manager.GetLastKnownStateAsync();
+
+        Assert.NotNull(mergedState);
+        Assert.Equal(originalPlan.SchemeGuid, mergedState.PreviousPowerPlan?.SchemeGuid);
+        Assert.Equal(PriorityLevel.Normal, mergedState.OriginalPriorities[10]);
+        Assert.Equal(PriorityLevel.BelowNormal, mergedState.OriginalPriorities[20]);
+    }
+
+    [Fact]
+    public async Task CaptureAsync_PreservesOriginalAndUpdatesAppliedValueWithinTransaction()
+    {
+        var transactionId = Guid.NewGuid();
+        var manager = new FileRollbackManager(
+            _statePath,
+            new FakePowerPlanManager(),
+            new FakePriorityManager(failingProcessId: -1),
+            new TestLogger());
+
+        await manager.CaptureAsync(new SchedulerState
+        {
+            TransactionId = transactionId,
+            OriginalPriorities = new Dictionary<int, PriorityLevel> { [10] = PriorityLevel.Normal },
+            AppliedPriorities = new Dictionary<int, PriorityLevel> { [10] = PriorityLevel.BelowNormal }
+        });
+        await manager.CaptureAsync(new SchedulerState
+        {
+            TransactionId = transactionId,
+            OriginalPriorities = new Dictionary<int, PriorityLevel> { [10] = PriorityLevel.High },
+            AppliedPriorities = new Dictionary<int, PriorityLevel> { [10] = PriorityLevel.Idle }
+        });
+
+        var state = await manager.GetLastKnownStateAsync();
+
+        Assert.NotNull(state);
+        Assert.Equal(transactionId, state.TransactionId);
+        Assert.Equal(PriorityLevel.Normal, state.OriginalPriorities[10]);
+        Assert.Equal(PriorityLevel.Idle, state.AppliedPriorities[10]);
+    }
+
+    [Fact]
+    public async Task CaptureAsync_RejectsStateFromDifferentTransaction()
+    {
+        var firstTransactionId = Guid.NewGuid();
+        var manager = new FileRollbackManager(
+            _statePath,
+            new FakePowerPlanManager(),
+            new FakePriorityManager(failingProcessId: -1),
+            new TestLogger());
+        await manager.CaptureAsync(new SchedulerState
+        {
+            TransactionId = firstTransactionId,
+            OriginalPriorities = new Dictionary<int, PriorityLevel> { [10] = PriorityLevel.Normal }
+        });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => manager.CaptureAsync(new SchedulerState
+        {
+            TransactionId = Guid.NewGuid(),
+            OriginalPriorities = new Dictionary<int, PriorityLevel> { [20] = PriorityLevel.Normal }
+        }));
+
+        var state = await manager.GetLastKnownStateAsync();
+        Assert.Equal(firstTransactionId, state?.TransactionId);
+        Assert.False(state!.OriginalPriorities.ContainsKey(20));
+    }
+
+    [Fact]
     public async Task RollbackAsync_PreservesUnresolvedStateWhenPriorityRestoreFails()
     {
         var powerPlanManager = new FakePowerPlanManager();
-        var priorityManager = new FakePriorityManager(failingProcessId: 10);
+        var priorityManager = new FakePriorityManager(
+            failingProcessId: 10,
+            currentPriorities: new Dictionary<int, PriorityLevel>
+            {
+                [10] = PriorityLevel.BelowNormal,
+                [20] = PriorityLevel.Idle
+            });
         var logger = new TestLogger();
         var manager = new FileRollbackManager(_statePath, powerPlanManager, priorityManager, logger);
 
@@ -82,6 +272,16 @@ public sealed class FileRollbackManagerTests : IDisposable
             {
                 [10] = PriorityLevel.Normal,
                 [20] = PriorityLevel.BelowNormal
+            },
+            AppliedPriorities = new Dictionary<int, PriorityLevel>
+            {
+                [10] = PriorityLevel.BelowNormal,
+                [20] = PriorityLevel.Idle
+            },
+            ProcessIdentities = new Dictionary<int, ProcessIdentitySnapshot>
+            {
+                [10] = CreateIdentity(10),
+                [20] = CreateIdentity(20)
             }
         });
 
@@ -92,6 +292,32 @@ public sealed class FileRollbackManagerTests : IDisposable
         Assert.True(remainingState.OriginalPriorities.ContainsKey(10));
         Assert.False(remainingState.OriginalPriorities.ContainsKey(20));
         Assert.Contains(logger.Messages, message => message.Contains("remaining state was preserved", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task RollbackAsync_DropsLegacyPriorityStateWithoutTouchingProcess()
+    {
+        var priorityManager = new FakePriorityManager(failingProcessId: -1);
+        var logger = new TestLogger();
+        var manager = new FileRollbackManager(
+            _statePath,
+            new FakePowerPlanManager(),
+            priorityManager,
+            logger);
+
+        await manager.CaptureAsync(new SchedulerState
+        {
+            OriginalPriorities = new Dictionary<int, PriorityLevel>
+            {
+                [10] = PriorityLevel.Normal
+            }
+        });
+
+        await manager.RollbackAsync();
+
+        Assert.Empty(priorityManager.RestoredPriorities);
+        Assert.False(File.Exists(_statePath));
+        Assert.Contains(logger.Messages, message => message.Contains("legacy process rollback", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -110,6 +336,89 @@ public sealed class FileRollbackManagerTests : IDisposable
         Assert.Contains(logger.Messages, message => message.Contains("could not be read", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public async Task RollbackAsync_DropsStateWithoutTouchingReusedProcessId()
+    {
+        var identity = CreateIdentity(10);
+        var priorityManager = new FakePriorityManager(
+            failingProcessId: -1,
+            mismatchedProcessIds: new HashSet<int> { 10 });
+        var manager = new FileRollbackManager(
+            _statePath,
+            new FakePowerPlanManager(),
+            priorityManager,
+            new TestLogger());
+
+        await manager.CaptureAsync(new SchedulerState
+        {
+            OriginalPriorities = new Dictionary<int, PriorityLevel> { [10] = PriorityLevel.Normal },
+            AppliedPriorities = new Dictionary<int, PriorityLevel> { [10] = PriorityLevel.BelowNormal },
+            ProcessIdentities = new Dictionary<int, ProcessIdentitySnapshot> { [10] = identity }
+        });
+
+        await manager.RollbackAsync();
+
+        Assert.Empty(priorityManager.RestoredPriorities);
+        Assert.False(File.Exists(_statePath));
+    }
+
+    [Fact]
+    public async Task RollbackAsync_DoesNotOverwritePriorityChangedAfterScheduling()
+    {
+        var priorityManager = new FakePriorityManager(
+            failingProcessId: -1,
+            currentPriorities: new Dictionary<int, PriorityLevel> { [10] = PriorityLevel.High });
+        var manager = new FileRollbackManager(
+            _statePath,
+            new FakePowerPlanManager(),
+            priorityManager,
+            new TestLogger());
+
+        await manager.CaptureAsync(new SchedulerState
+        {
+            OriginalPriorities = new Dictionary<int, PriorityLevel> { [10] = PriorityLevel.Normal },
+            AppliedPriorities = new Dictionary<int, PriorityLevel> { [10] = PriorityLevel.BelowNormal },
+            ProcessIdentities = new Dictionary<int, ProcessIdentitySnapshot> { [10] = CreateIdentity(10) }
+        });
+
+        await manager.RollbackAsync();
+
+        Assert.Empty(priorityManager.RestoredPriorities);
+        Assert.False(File.Exists(_statePath));
+    }
+
+    [Fact]
+    public async Task RollbackAsync_RestoresPriorityAndEfficiencyModeWhenAppliedStateIsUnchanged()
+    {
+        var priorityManager = new FakePriorityManager(
+            failingProcessId: -1,
+            currentPriorities: new Dictionary<int, PriorityLevel> { [10] = PriorityLevel.BelowNormal },
+            currentEfficiencyModes: new Dictionary<int, bool> { [10] = true });
+        var manager = new FileRollbackManager(
+            _statePath,
+            new FakePowerPlanManager(),
+            priorityManager,
+            new TestLogger());
+
+        await manager.CaptureAsync(new SchedulerState
+        {
+            OriginalPriorities = new Dictionary<int, PriorityLevel> { [10] = PriorityLevel.Normal },
+            AppliedPriorities = new Dictionary<int, PriorityLevel> { [10] = PriorityLevel.BelowNormal },
+            ProcessIdentities = new Dictionary<int, ProcessIdentitySnapshot> { [10] = CreateIdentity(10) },
+            OriginalEfficiencyModes = new Dictionary<int, ProcessEfficiencyModeState>
+            {
+                [10] = new() { IsEnabled = false }
+            },
+            AppliedEfficiencyModes = new Dictionary<int, bool> { [10] = true }
+        });
+
+        await manager.RollbackAsync();
+
+        Assert.Equal(PriorityLevel.Normal, priorityManager.RestoredPriorities[10]);
+        Assert.False(priorityManager.RestoredEfficiencyModes[10]);
+        Assert.False(File.Exists(_statePath));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempDirectory))
@@ -124,15 +433,20 @@ public sealed class FileRollbackManagerTests : IDisposable
 
         public PowerPlanAdvancedState? RestoredAdvancedState { get; private set; }
 
+        public PowerPlanInfo? CurrentPowerPlan { get; set; }
+
+        public PowerPlanAdvancedState? CurrentAdvancedState { get; set; }
+
         public Task<IReadOnlyList<PowerPlanInfo>> GetAvailablePlansAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<PowerPlanInfo>>(Array.Empty<PowerPlanInfo>());
 
         public Task<PowerPlanInfo?> GetActivePlanAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult<PowerPlanInfo?>(null);
+            Task.FromResult(CurrentPowerPlan);
 
         public Task<bool> SetActivePlanAsync(Guid schemeGuid, CancellationToken cancellationToken = default)
         {
             SetActivePlanCalled = true;
+            CurrentPowerPlan = new PowerPlanInfo(schemeGuid, "Restored", IsActive: true);
             return Task.FromResult(true);
         }
 
@@ -140,7 +454,11 @@ public sealed class FileRollbackManagerTests : IDisposable
             Guid schemeGuid,
             PowerSourceMode powerSourceMode,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult<PowerPlanAdvancedState?>(null);
+            Task.FromResult(
+                CurrentAdvancedState?.SchemeGuid == schemeGuid &&
+                CurrentAdvancedState.PowerSourceMode == powerSourceMode
+                    ? CurrentAdvancedState
+                    : null);
 
         public Task<bool> ApplyAdvancedSettingsAsync(
             Guid schemeGuid,
@@ -154,16 +472,31 @@ public sealed class FileRollbackManagerTests : IDisposable
             CancellationToken cancellationToken = default)
         {
             RestoredAdvancedState = state;
+            CurrentAdvancedState = state;
             return Task.FromResult(true);
         }
     }
 
-    private sealed class FakePriorityManager(int failingProcessId) : IPriorityManager
+    private sealed class FakePriorityManager(
+        int failingProcessId,
+        IReadOnlyDictionary<int, PriorityLevel>? currentPriorities = null,
+        IReadOnlyDictionary<int, bool>? currentEfficiencyModes = null,
+        IReadOnlySet<int>? mismatchedProcessIds = null) : IPriorityManager
     {
         public Dictionary<int, PriorityLevel> RestoredPriorities { get; } = new();
 
+        public Dictionary<int, bool> RestoredEfficiencyModes { get; } = new();
+
+        public Task<bool> IsSameProcessAsync(
+            ProcessIdentitySnapshot identity,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(mismatchedProcessIds?.Contains(identity.ProcessId) != true);
+
         public Task<PriorityLevel?> TryGetPriorityAsync(int processId, CancellationToken cancellationToken = default) =>
-            Task.FromResult<PriorityLevel?>(null);
+            Task.FromResult<PriorityLevel?>(
+                currentPriorities is not null && currentPriorities.TryGetValue(processId, out var priority)
+                    ? priority
+                    : null);
 
         public Task<bool> SetPriorityAsync(int processId, PriorityLevel priority, CancellationToken cancellationToken = default)
         {
@@ -173,6 +506,23 @@ public sealed class FileRollbackManagerTests : IDisposable
             }
 
             RestoredPriorities[processId] = priority;
+            return Task.FromResult(true);
+        }
+
+        public Task<ProcessEfficiencyModeState?> TryGetEfficiencyModeAsync(
+            int processId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<ProcessEfficiencyModeState?>(
+                currentEfficiencyModes is not null && currentEfficiencyModes.TryGetValue(processId, out var enabled)
+                    ? new ProcessEfficiencyModeState { IsEnabled = enabled }
+                    : null);
+
+        public Task<bool> SetEfficiencyModeAsync(
+            int processId,
+            bool enabled,
+            CancellationToken cancellationToken = default)
+        {
+            RestoredEfficiencyModes[processId] = enabled;
             return Task.FromResult(true);
         }
 
@@ -194,6 +544,22 @@ public sealed class FileRollbackManagerTests : IDisposable
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<BackgroundProcessAdjustmentResult>>(Array.Empty<BackgroundProcessAdjustmentResult>());
     }
+
+    private static ProcessIdentitySnapshot CreateIdentity(int processId) =>
+        new()
+        {
+            ProcessId = processId,
+            ProcessName = $"process-{processId}",
+            StartedAt = DateTimeOffset.UnixEpoch
+        };
+
+    private static PowerPlanAdvancedState CreateAdvancedState(Guid schemeGuid, int maximumProcessorState) =>
+        new()
+        {
+            SchemeGuid = schemeGuid,
+            PowerSourceMode = PowerSourceMode.Ac,
+            ProcessorMaxStatePercent = maximumProcessorState
+        };
 
     private sealed class TestLogger : IAppLogger
     {

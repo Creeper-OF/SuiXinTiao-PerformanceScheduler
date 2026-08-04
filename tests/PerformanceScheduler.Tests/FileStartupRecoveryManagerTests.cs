@@ -30,7 +30,8 @@ public sealed class FileStartupRecoveryManagerTests : IDisposable
         {
             Id = "unsafe-profile",
             Name = "Unsafe Profile",
-            Version = 1
+            Version = 1,
+            Match = new ProfileMatchCriteria { ProcessNames = new[] { "unsafe" } }
         };
 
         await profileManager.SaveProfileAsync(profile);
@@ -70,7 +71,8 @@ public sealed class FileStartupRecoveryManagerTests : IDisposable
         var profile = new PerformanceProfile
         {
             Id = "stable-profile",
-            Name = "Stable Profile"
+            Name = "Stable Profile",
+            Match = new ProfileMatchCriteria { ProcessNames = new[] { "stable" } }
         };
 
         await profileManager.SaveProfileAsync(profile);

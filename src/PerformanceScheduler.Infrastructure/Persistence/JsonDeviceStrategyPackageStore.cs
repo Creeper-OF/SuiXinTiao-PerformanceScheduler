@@ -2,13 +2,16 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using PerformanceScheduler.Core.Abstractions;
 using PerformanceScheduler.Core.Models;
+using PerformanceScheduler.Core.Profiles.Validation;
+using PerformanceScheduler.Core.Services;
 
 namespace PerformanceScheduler.Infrastructure.Persistence;
 
-public sealed class JsonDeviceStrategyPackageStore : IDeviceStrategyPackageStore
+public sealed class JsonDeviceStrategyPackageStore : IDeviceStrategyPackageStore, IConfigurationLoadIssueSource
 {
     private readonly string _packagesDirectory;
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly List<ConfigurationLoadIssue> _loadIssues = new();
 
     public JsonDeviceStrategyPackageStore(string packagesDirectory)
     {
@@ -21,6 +24,8 @@ public sealed class JsonDeviceStrategyPackageStore : IDeviceStrategyPackageStore
         };
     }
 
+    public IReadOnlyList<ConfigurationLoadIssue> LoadIssues => _loadIssues.ToArray();
+
     public async Task<IReadOnlyList<DeviceStrategyPackage>> LoadPackagesAsync(CancellationToken cancellationToken = default)
     {
         if (!Directory.Exists(_packagesDirectory))
@@ -29,6 +34,7 @@ public sealed class JsonDeviceStrategyPackageStore : IDeviceStrategyPackageStore
         }
 
         var packages = new List<DeviceStrategyPackage>();
+        _loadIssues.Clear();
         foreach (var path in Directory.GetFiles(_packagesDirectory, "*.json", SearchOption.TopDirectoryOnly))
         {
             var package = await ReadSinglePackageAsync(path, cancellationToken);
@@ -46,8 +52,11 @@ public sealed class JsonDeviceStrategyPackageStore : IDeviceStrategyPackageStore
 
     public async Task SavePackageAsync(DeviceStrategyPackage package, CancellationToken cancellationToken = default)
     {
+        ConfigurationSchemaPolicy.ValidateDeviceStrategyPackage(package);
+        ValidatePackageProfiles(package);
         Directory.CreateDirectory(_packagesDirectory);
         var path = GetPackagePath(package);
+        await AtomicFile.WriteJsonAsync(path, package, _jsonOptions, cancellationToken);
 
         foreach (var existingPath in Directory.GetFiles(_packagesDirectory, "*.json", SearchOption.TopDirectoryOnly))
         {
@@ -62,9 +71,6 @@ public sealed class JsonDeviceStrategyPackageStore : IDeviceStrategyPackageStore
                 File.Delete(existingPath);
             }
         }
-
-        await using var stream = File.Create(path);
-        await JsonSerializer.SerializeAsync(stream, package, _jsonOptions, cancellationToken);
     }
 
     private string GetPackagePath(DeviceStrategyPackage package)
@@ -79,7 +85,10 @@ public sealed class JsonDeviceStrategyPackageStore : IDeviceStrategyPackageStore
         try
         {
             await using var stream = File.OpenRead(path);
-            return await JsonSerializer.DeserializeAsync<DeviceStrategyPackage>(stream, _jsonOptions, cancellationToken);
+            var package = await JsonSerializer.DeserializeAsync<DeviceStrategyPackage>(stream, _jsonOptions, cancellationToken);
+            return package is null
+                ? null
+                : ValidateLoadedPackage(package, path);
         }
         catch (OperationCanceledException)
         {
@@ -89,6 +98,41 @@ public sealed class JsonDeviceStrategyPackageStore : IDeviceStrategyPackageStore
         {
             return null;
         }
+        catch (UnsupportedConfigurationSchemaException exception)
+        {
+            _loadIssues.Add(new ConfigurationLoadIssue
+            {
+                SourcePath = path,
+                Message = exception.Message
+            });
+            return null;
+        }
+        catch (InvalidProfileConfigurationException exception)
+        {
+            _loadIssues.Add(new ConfigurationLoadIssue
+            {
+                SourcePath = path,
+                Message = exception.Message
+            });
+            return null;
+        }
+    }
+
+    private static DeviceStrategyPackage ValidateLoadedPackage(
+        DeviceStrategyPackage package,
+        string path)
+    {
+        ConfigurationSchemaPolicy.ValidateDeviceStrategyPackage(package, path);
+        ValidatePackageProfiles(package, path);
+        return package;
+    }
+
+    private static void ValidatePackageProfiles(DeviceStrategyPackage package, string? source = null)
+    {
+        var profiles = package.Profiles is null
+            ? new PerformanceProfile?[] { null }
+            : package.Profiles.Select(item => item?.Profile).ToArray();
+        ProfileSafetyValidator.EnsureLibraryCanPersist(profiles, source);
     }
 
     private static string SanitizeFileName(string fileName)

@@ -43,6 +43,12 @@ public sealed class ProfileMatcherTests
 
         Assert.NotNull(result);
         Assert.Equal("Executable Match", result!.Profile.Name);
+        Assert.Equal(100, result.Score);
+        var reason = Assert.Single(result.Reasons);
+        Assert.Equal(ProfileMatchReasonKind.ExecutableName, reason.Kind);
+        Assert.Equal(100, reason.ScoreContribution);
+        Assert.Equal("eldenring.exe", reason.RuleValue);
+        Assert.Equal("eldenring.exe", reason.ActualValue);
     }
 
     [Fact]
@@ -113,6 +119,9 @@ public sealed class ProfileMatcherTests
         Assert.NotNull(result);
         Assert.Equal("Global Default", result!.Profile.Name);
         Assert.Equal("Global default fallback", result.Reason);
+        var reason = Assert.Single(result.Reasons);
+        Assert.Equal(ProfileMatchReasonKind.GlobalDefaultFallback, reason.Kind);
+        Assert.Equal(1, reason.ScoreContribution);
     }
 
     [Fact]
@@ -186,5 +195,64 @@ public sealed class ProfileMatcherTests
         var result = matcher.Match(app, profiles);
 
         Assert.Null(result);
+    }
+
+    [Fact]
+    public void Match_ReturnsStructuredReasonsThatAddUpToScore()
+    {
+        var matcher = new ProfileMatcher();
+        var app = new FocusedAppContext
+        {
+            ProcessId = 100,
+            ProcessName = "eldenring",
+            ExecutablePath = @"C:\Games\EldenRing\eldenring.exe",
+            WindowTitle = "ELDEN RING - Main Window",
+            WindowHandle = 123,
+            Classification = ProcessClassification.Game,
+            PowerSourceMode = PowerSourceMode.Ac
+        };
+        var profile = new PerformanceProfile
+        {
+            Name = "Complete Match",
+            PowerSourceMode = PowerSourceMode.Ac,
+            TargetClassification = ProcessClassification.Game,
+            Match = new ProfileMatchCriteria
+            {
+                ExecutableNames = new[] { "eldenring.exe" },
+                ProcessNames = new[] { "eldenring" },
+                WindowTitleContains = new[] { "ELDEN RING" },
+                Classifications = new[] { ProcessClassification.Game }
+            }
+        };
+
+        var result = matcher.Match(app, new[] { profile });
+
+        Assert.NotNull(result);
+        Assert.Equal(285, result!.Score);
+        Assert.Equal(result.Score, result.Reasons.Sum(reason => reason.ScoreContribution));
+        Assert.Collection(
+            result.Reasons,
+            reason => AssertReason(reason, ProfileMatchReasonKind.PowerSource, 15, "Ac", "Ac"),
+            reason => AssertReason(reason, ProfileMatchReasonKind.ExecutableName, 100, "eldenring.exe", "eldenring.exe"),
+            reason => AssertReason(reason, ProfileMatchReasonKind.ProcessName, 80, "eldenring", "eldenring"),
+            reason => AssertReason(reason, ProfileMatchReasonKind.WindowTitle, 40, "ELDEN RING", "ELDEN RING - Main Window"),
+            reason => AssertReason(reason, ProfileMatchReasonKind.Classification, 30, "Game", "Game"),
+            reason => AssertReason(reason, ProfileMatchReasonKind.TargetClassification, 20, "Game", "Game"));
+        Assert.Equal(
+            "Power source matched, Executable matched, Process name matched, Window title matched, Classification matched, Target classification matched",
+            result.Reason);
+    }
+
+    private static void AssertReason(
+        ProfileMatchReason reason,
+        ProfileMatchReasonKind expectedKind,
+        int expectedScore,
+        string expectedRule,
+        string expectedActual)
+    {
+        Assert.Equal(expectedKind, reason.Kind);
+        Assert.Equal(expectedScore, reason.ScoreContribution);
+        Assert.Equal(expectedRule, reason.RuleValue);
+        Assert.Equal(expectedActual, reason.ActualValue);
     }
 }

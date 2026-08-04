@@ -12,6 +12,10 @@ public sealed record BackgroundProcessAdjustmentResult
 
     public PriorityLevel? AppliedPriority { get; init; }
 
+    public bool? PreviousEfficiencyMode { get; init; }
+
+    public bool? AppliedEfficiencyMode { get; init; }
+
     public SchedulerActionStatus Status { get; init; } = SchedulerActionStatus.Skipped;
 
     public string Message { get; init; } = string.Empty;

@@ -62,6 +62,29 @@ public sealed class JsonCommunityProfileCatalogTests : IDisposable
         Assert.Empty(profiles);
     }
 
+    [Fact]
+    public async Task LoadProfilesAsync_SkipsFutureEntrySchemaAndReportsIssue()
+    {
+        var seedPath = Path.Combine(_tempDirectory, "missing-seed.json");
+        var storagePath = Path.Combine(_tempDirectory, "runtime", "community-catalog.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(storagePath)!);
+        await File.WriteAllTextAsync(storagePath, """
+        [
+          {
+            "schemaVersion": 2,
+            "entryId": "future",
+            "profile": { "schemaVersion": 1, "id": "future" }
+          }
+        ]
+        """);
+        var catalog = new JsonCommunityProfileCatalog(storagePath, seedPath);
+
+        var profiles = await catalog.LoadProfilesAsync();
+
+        Assert.Empty(profiles);
+        Assert.Single(catalog.LoadIssues);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempDirectory))

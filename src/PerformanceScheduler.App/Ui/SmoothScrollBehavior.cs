@@ -80,11 +80,22 @@ public static class SmoothScrollBehavior
 
         element.Loaded -= OnLoaded;
         element.PreviewMouseWheel -= OnPreviewMouseWheel;
+        element.BeginAnimation(AnimatedVerticalOffsetProperty, null);
+        if (FindDescendant<ScrollViewer>(element) is { } scrollViewer)
+        {
+            SetAnimatedVerticalOffset(element, scrollViewer.VerticalOffset);
+            SetTargetVerticalOffset(element, scrollViewer.VerticalOffset);
+        }
     }
 
     private static void OnLoaded(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement dependencyObject)
+        {
+            return;
+        }
+
+        if (!SystemParameters.ClientAreaAnimation)
         {
             return;
         }

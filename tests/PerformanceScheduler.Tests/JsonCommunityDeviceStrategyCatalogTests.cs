@@ -81,6 +81,46 @@ public sealed class JsonCommunityDeviceStrategyCatalogTests : IDisposable
         Assert.Empty(strategies);
     }
 
+    [Fact]
+    public async Task LoadStrategiesAsync_SkipsFutureNestedPackageSchemaAndReportsIssue()
+    {
+        var seedPath = Path.Combine(_tempDirectory, "missing-seed.json");
+        var storagePath = Path.Combine(_tempDirectory, "runtime", "device-strategies.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(storagePath)!);
+        await File.WriteAllTextAsync(storagePath, """
+        [
+          {
+            "schemaVersion": 1,
+            "entryId": "future",
+            "package": { "schemaVersion": 2, "packageId": "future" }
+          }
+        ]
+        """);
+        var catalog = new JsonCommunityDeviceStrategyCatalog(storagePath, seedPath);
+
+        var strategies = await catalog.LoadStrategiesAsync();
+
+        Assert.Empty(strategies);
+        Assert.Single(catalog.LoadIssues);
+    }
+
+    [Fact]
+    public async Task BundledCatalog_UsesCurrentCpuAndGpuSettingFields()
+    {
+        var repositoryRoot = Path.GetFullPath(
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+        var seedPath = Path.Combine(repositoryRoot, "community", "sample-device-strategies.json");
+        var storagePath = Path.Combine(_tempDirectory, "runtime", "device-strategies.json");
+        var catalog = new JsonCommunityDeviceStrategyCatalog(storagePath, seedPath);
+
+        var strategies = await catalog.LoadStrategiesAsync();
+
+        var strategy = Assert.Single(strategies);
+        Assert.Equal(95, strategy.Package.Profiles[0].Profile.PowerPlan.Advanced.ProcessorMaxStatePercent);
+        Assert.Equal(75, strategy.Package.Profiles[1].Profile.PowerPlan.Advanced.ProcessorMaxStatePercent);
+        Assert.Equal(1200, strategy.Package.Profiles[1].Profile.Gpu.MaxCoreClockMHz);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempDirectory))

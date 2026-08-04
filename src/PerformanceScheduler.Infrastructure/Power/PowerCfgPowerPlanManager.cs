@@ -18,8 +18,13 @@ public sealed partial class PowerCfgPowerPlanManager : IPowerPlanManager
             return Array.Empty<PowerPlanInfo>();
         }
 
+        return ParsePowerPlans(result.StandardOutput);
+    }
+
+    internal static IReadOnlyList<PowerPlanInfo> ParsePowerPlans(string output)
+    {
         var plans = new List<PowerPlanInfo>();
-        foreach (var line in result.StandardOutput.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries))
+        foreach (var line in output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries))
         {
             var match = PowerPlanRegex().Match(line);
             if (!match.Success)
@@ -134,7 +139,7 @@ public sealed partial class PowerCfgPowerPlanManager : IPowerPlanManager
     [GeneratedRegex(@"(?<guid>[0-9a-fA-F\-]{36}).*?\((?<name>.+?)\)")]
     private static partial Regex PowerPlanRegex();
 
-    private static int? ParsePowerSettingValue(string output, PowerSourceMode powerSourceMode)
+    internal static int? ParsePowerSettingValue(string output, PowerSourceMode powerSourceMode)
     {
         var matches = PowerSettingValueRegex().Matches(output);
         if (matches.Count == 0)

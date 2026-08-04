@@ -25,7 +25,11 @@
   </Grid.Background>
   <Image Source="{Binding AppearanceBackgroundImagePath, Converter={StaticResource ImagePathToBitmapConverter}}" Stretch="UniformToFill" Opacity="{Binding AppearanceBackgroundImageOpacity}" Visibility="{Binding AppearanceBackgroundImageVisibility}" IsHitTestVisible="False"/>
   <Border Margin="0" Padding="0" Background="{Binding AppearanceWindowOverlayBrush}" BorderBrush="#FFE3EAF4" BorderThickness="1" CornerRadius="0">
-   <TabControl Background="Transparent" BorderThickness="0" TabStripPlacement="Left">
+   <TabControl Background="Transparent"
+               BorderThickness="0"
+               TabStripPlacement="Left"
+               ui:PageTransitionBehavior.IsEnabled="{Binding UiMotionEnabled}"
+               ui:PageTransitionBehavior.DurationMilliseconds="{Binding UiMotionDurationMilliseconds}">
     <TabControl.Resources>
      <Style x:Key="SidebarTabItemStyle" TargetType="TabItem">
       <Setter Property="Margin" Value="0,0,0,8"/>
@@ -217,7 +221,7 @@
         </Border>
         <Grid Grid.Row="1">
          <Image Source="{Binding AppearanceContentBackgroundImagePath, Converter={StaticResource ImagePathToBitmapConverter}}" Stretch="UniformToFill" Opacity="{Binding AppearanceBackgroundImageOpacity}" Visibility="{Binding AppearanceContentBackgroundImageVisibility}" IsHitTestVisible="False"/>
-         <Border Background="{Binding AppearanceContentOverlayBrush}"><ContentPresenter ContentSource="SelectedContent"/></Border>
+         <Border Background="{Binding AppearanceContentOverlayBrush}"><ContentPresenter x:Name="PART_SelectedContentHost" ContentSource="SelectedContent"/></Border>
         </Grid>
        </Grid>
       </Grid>
@@ -233,7 +237,9 @@
        <TextBlock Margin="0,5,0,0" FontSize="12" TextWrapping="Wrap" Foreground="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Foreground}" Opacity="0.78" Text="{Binding DataContext.Strings[Nav.OverviewDescription], RelativeSource={RelativeSource AncestorType=Window}}"/>
       </StackPanel>
      </TabItem.Header>
-     <Grid Margin="18">
+     <Grid Margin="18"
+           ui:StaggeredRevealBehavior.IsEnabled="{Binding UiStaggeredRevealEnabled}"
+           ui:StaggeredRevealBehavior.DurationMilliseconds="{Binding UiMotionDurationMilliseconds}">
        <Grid.RowDefinitions><RowDefinition Height="0.62*"/><RowDefinition Height="1.1*"/><RowDefinition Height="0.86*"/></Grid.RowDefinitions>
        <Grid>
         <Grid.ColumnDefinitions><ColumnDefinition Width="1.55*"/><ColumnDefinition Width="0.85*"/><ColumnDefinition Width="0.95*"/></Grid.ColumnDefinitions>
@@ -302,7 +308,21 @@
             <StackPanel Grid.Column="1" Margin="10,0,0,0">
              <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource SidebarMutedBrush}" Text="{Binding Strings[Section.MatchedProfile]}"/>
              <TextBlock Margin="0,5,0,0" FontSize="18" FontWeight="Bold" TextTrimming="CharacterEllipsis" Foreground="{StaticResource TitleBrush}" Text="{Binding MatchedProfileName}"/>
-             <TextBlock Margin="0,5,0,0" MaxHeight="30" FontSize="12" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" Text="{Binding ProfileReason}"/>
+             <TextBlock Margin="0,4,0,0" FontSize="12" TextTrimming="CharacterEllipsis" Text="{Binding ProfileReason}"/>
+             <ItemsControl Margin="0,5,0,0" MaxHeight="44" ItemsSource="{Binding ProfileMatchReasons}" ClipToBounds="True">
+              <ItemsControl.ItemsPanel>
+               <ItemsPanelTemplate>
+                <WrapPanel/>
+               </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+               <DataTemplate>
+                <Border Margin="0,0,5,4" Padding="7,3" Background="#FFEAF2FF" CornerRadius="8" ToolTip="{Binding Detail}">
+                 <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" Text="{Binding Label}"/>
+                </Border>
+               </DataTemplate>
+              </ItemsControl.ItemTemplate>
+             </ItemsControl>
             </StackPanel>
            </Grid>
           </Border>
@@ -331,7 +351,7 @@
            </Grid>
           </Border>
          </UniformGrid>
-         <UniformGrid Margin="0,10,0,0" Columns="3">
+         <UniformGrid Margin="0,10,0,0" Columns="2">
           <Border Margin="0,0,10,0" Padding="12" Background="#FFF9FCFF" BorderBrush="#FFE4ECF7" BorderThickness="1" CornerRadius="16">
            <StackPanel>
             <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource SidebarMutedBrush}" Text="{Binding Strings[Section.BasicMetrics]}"/>
@@ -342,12 +362,6 @@
            <StackPanel>
             <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#FF9B6A18" Text="{Binding Strings[Section.LastScan]}"/>
             <TextBlock Margin="0,8,0,0" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Foreground="{StaticResource TitleBrush}" Text="{Binding LastRefreshTime}"/>
-           </StackPanel>
-          </Border>
-          <Border Margin="6,0,4,0" Padding="12" Background="#FFF7FBF8" BorderBrush="#FFE0F0E6" BorderThickness="1" CornerRadius="16">
-           <StackPanel>
-            <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#FF2F7B5A" Text="{Binding Strings[Section.StorageOverview]}"/>
-            <TextBlock Margin="0,8,0,0" MaxHeight="34" FontSize="12" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" Foreground="{StaticResource TitleBrush}" Text="{Binding StorageSummary}"/>
            </StackPanel>
           </Border>
          </UniformGrid>
@@ -395,7 +409,7 @@
            </StackPanel>
            <Button Grid.Column="1" Content="{Binding Strings[Button.ClearStatusCenter]}" Command="{Binding ClearStatusCenterCommand}" Background="#FFFFFFFF" Foreground="{StaticResource AccentBrush}" BorderBrush="#FF9FC3FF" BorderThickness="1"/>
           </Grid>
-          <ListBox Grid.Row="1" Margin="0,10,0,0" ClipToBounds="True" ScrollViewer.CanContentScroll="False" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ui:SmoothScrollBehavior.IsEnabled="True" ItemsSource="{Binding StatusCenterItems}">
+          <ListBox Grid.Row="1" Margin="0,10,0,0" ClipToBounds="True" ScrollViewer.CanContentScroll="False" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ui:SmoothScrollBehavior.IsEnabled="{Binding UiMotionEnabled}" ItemsSource="{Binding StatusCenterItems}">
            <ListBox.ItemTemplate>
             <DataTemplate DataType="{x:Type viewModels:StatusCenterItemViewModel}">
              <Border Margin="0,0,0,8" Padding="10" Background="#FFF8FBFF" BorderBrush="#FFE2EAF5" BorderThickness="1" CornerRadius="12">
@@ -436,250 +450,11 @@
        <TextBlock Margin="0,5,0,0" FontSize="12" TextWrapping="Wrap" Foreground="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Foreground}" Opacity="0.78" Text="{Binding DataContext.Strings[Nav.ProfilesDescription], RelativeSource={RelativeSource AncestorType=Window}}"/>
       </StackPanel>
      </TabItem.Header>
-     <ScrollViewer VerticalScrollBarVisibility="Auto">
-      <Grid Margin="28">
-       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-       <Border Style="{StaticResource CardStyle}" Padding="26" Background="#FFF9FCFD">
-        <Grid>
-         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-         <StackPanel><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.ProfileLibrary]}"/><TextBlock Margin="0,8,0,0" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding ProfileEditorStatus}"/></StackPanel>
-         <WrapPanel Grid.Column="1" HorizontalAlignment="Right">
-          <Button Content="{Binding Strings[Button.Reload]}" Command="{Binding ReloadProfilesCommand}" Background="#FF315F72"/>
-          <Button Content="{Binding Strings[Button.New]}" Command="{Binding NewProfileCommand}" Background="#FF1F7A5C"/>
-          <Button Content="{Binding Strings[Button.Save]}" Command="{Binding SaveProfileCommand}"/>
-          <Button Content="{Binding Strings[Button.Import]}" Command="{Binding ImportProfilesCommand}" Background="#FF6178A6"/>
-          <Button Content="{Binding Strings[Button.Export]}" Command="{Binding ExportProfilesCommand}" Background="#FF946C2B"/>
-          <Button Content="{Binding Strings[Button.ImportMigration]}" Command="{Binding ImportMigrationPackageCommand}" Background="#FF5B86A8"/>
-          <Button Content="{Binding Strings[Button.ExportMigration]}" Command="{Binding ExportMigrationPackageCommand}" Background="#FF2E9AAE"/>
-          <Button Content="{Binding Strings[Button.RollbackRevision]}" Command="{Binding RollbackProfileCommand}" Background="#FF8A3B49"/>
-         </WrapPanel>
-        </Grid>
-       </Border>
-       <Border Grid.Row="1" Style="{StaticResource CardStyle}" Background="#FFFDFBF5">
-        <Grid>
-         <Grid.ColumnDefinitions><ColumnDefinition Width="1*"/><ColumnDefinition Width="1*"/><ColumnDefinition Width="1*"/></Grid.ColumnDefinitions>
-         <StackPanel Margin="0,0,12,0">
-          <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#FF9B6A18" Text="{Binding Strings[Section.OperationPath]}"/>
-          <TextBlock Margin="0,8,0,0" FontSize="15" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Hint.ProfilePathCommunityTitle]}"/>
-          <TextBlock Margin="0,8,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding Strings[Hint.ProfilePathCommunityBody]}"/>
-         </StackPanel>
-         <StackPanel Grid.Column="1" Margin="12,0,12,0">
-          <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.LocalDeviceStrategies]}"/>
-          <TextBlock Margin="0,8,0,0" FontSize="15" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Hint.ProfilePathLocalTitle]}"/>
-          <TextBlock Margin="0,8,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding Strings[Hint.ProfilePathLocalBody]}"/>
-         </StackPanel>
-         <StackPanel Grid.Column="2" Margin="12,0,0,0">
-          <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#FF2F7B5A" Text="{Binding Strings[Section.SavedProfiles]}"/>
-          <TextBlock Margin="0,8,0,0" FontSize="15" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Hint.ProfilePathEditTitle]}"/>
-          <TextBlock Margin="0,8,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding Strings[Hint.ProfilePathEditBody]}"/>
-         </StackPanel>
-        </Grid>
-       </Border>
-       <Border Grid.Row="2" Margin="0,0,0,20" Style="{StaticResource CardStyle}" Background="#FFF6FBFD">
-        <Grid>
-         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-         <Grid>
-          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-          <StackPanel>
-           <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.CommunityHub]}"/>
-           <TextBlock Margin="0,8,0,0" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.Community]}"/>
-           <TextBlock Margin="0,8,0,0" FontSize="13" TextWrapping="Wrap" Text="{Binding Strings[Hint.CommunityHub]}"/>
-           <TextBlock Margin="0,10,0,0" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding CommunityCatalogStatus}"/>
-           <TextBlock Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource AccentBrush}" Text="{Binding CommunityFilterSummary}"/>
-           <WrapPanel Margin="0,12,0,0">
-            <Border Padding="10,4" Margin="0,0,8,0" Background="#FFE7F4F6" CornerRadius="999"><TextBlock Text="{Binding Strings[Community.FilterPluggedIn]}"/></Border>
-            <Border Padding="10,4" Background="#FFFFF3E5" CornerRadius="999"><TextBlock Text="{Binding Strings[Community.FilterBattery]}"/></Border>
-           </WrapPanel>
-          </StackPanel>
-          <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
-           <Button Content="{Binding Strings[Button.RefreshCommunity]}" Command="{Binding RefreshCommunityCatalogCommand}" Background="#FF6178A6"/>
-           <Button Content="{Binding Strings[Button.ImportDeviceStrategy]}" Command="{Binding ImportCommunityDeviceStrategyCommand}" Visibility="{Binding CommunityDeviceStrategiesVisibility}" Background="#FF315F72"/>
-           <Button Content="{Binding Strings[Button.ImportCommunity]}" Command="{Binding ImportCommunityProfileCommand}" Visibility="{Binding CommunityProfilesVisibility}" Background="#FF315F72"/>
-          </StackPanel>
-         </Grid>
-         <Grid Grid.Row="1" Margin="0,18,0,0">
-          <Grid.ColumnDefinitions><ColumnDefinition Width="1.2*"/><ColumnDefinition Width="0.9*"/><ColumnDefinition Width="0.9*"/><ColumnDefinition Width="0.9*"/></Grid.ColumnDefinitions>
-          <StackPanel Margin="0,0,10,0"><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.Search]}"/><TextBox Text="{Binding CommunitySearchText, UpdateSourceTrigger=PropertyChanged}"/></StackPanel>
-          <StackPanel Grid.Column="1" Margin="10,0,10,0"><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.SourceFilter]}"/><ComboBox ItemsSource="{Binding CommunitySourceFilterOptions}" DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding SelectedCommunitySourceFilter, Mode=TwoWay}"/></StackPanel>
-          <StackPanel Grid.Column="2" Margin="10,0,10,0"><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.PowerSourceMode]}"/><ComboBox ItemsSource="{Binding CommunityPowerFilterOptions}" DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding SelectedCommunityPowerFilter, Mode=TwoWay}"/></StackPanel>
-          <StackPanel Grid.Column="3" Margin="10,0,0,0"><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.TargetClassification]}"/><ComboBox ItemsSource="{Binding CommunityClassificationFilterOptions}" DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding SelectedCommunityClassificationFilter, Mode=TwoWay}"/></StackPanel>
-         </Grid>
-         <Grid Grid.Row="2" Margin="0,18,0,0">
-          <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-          <Border Height="44" Padding="4" Background="#FFE8F4F7" BorderBrush="#FFD1E4EA" BorderThickness="1" CornerRadius="22">
-           <Grid>
-            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-            <Button Grid.Column="0" Content="{Binding Strings[Section.DeviceStrategies]}" Command="{Binding SelectCommunitySectionCommand}" CommandParameter="DeviceStrategies" Margin="0" Padding="14,8">
-             <Button.Style>
-              <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-               <Setter Property="Background" Value="Transparent"/>
-               <Setter Property="Foreground" Value="{StaticResource TitleBrush}"/>
-               <Style.Triggers>
-                <DataTrigger Binding="{Binding IsCommunityDeviceStrategiesSelected}" Value="True">
-                 <Setter Property="Background" Value="#FF1E8FA3"/>
-                 <Setter Property="Foreground" Value="White"/>
-                </DataTrigger>
-               </Style.Triggers>
-              </Style>
-             </Button.Style>
-            </Button>
-            <Button Grid.Column="1" Content="{Binding Strings[Section.StandaloneProfiles]}" Command="{Binding SelectCommunitySectionCommand}" CommandParameter="Profiles" Margin="0" Padding="14,8">
-             <Button.Style>
-              <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-               <Setter Property="Background" Value="Transparent"/>
-               <Setter Property="Foreground" Value="{StaticResource TitleBrush}"/>
-               <Style.Triggers>
-                <DataTrigger Binding="{Binding IsCommunityProfilesSelected}" Value="True">
-                 <Setter Property="Background" Value="#FF1E8FA3"/>
-                 <Setter Property="Foreground" Value="White"/>
-                </DataTrigger>
-               </Style.Triggers>
-              </Style>
-             </Button.Style>
-            </Button>
-           </Grid>
-          </Border>
-         <ListBox Grid.Row="1" Margin="0,14,0,0" Height="190" Visibility="{Binding CommunityDeviceStrategiesVisibility}" ItemsSource="{Binding CommunityDeviceStrategies}" SelectedItem="{Binding SelectedCommunityDeviceStrategy, Mode=TwoWay}">
-           <ListBox.ItemTemplate>
-            <DataTemplate DataType="{x:Type viewModels:CommunityDeviceStrategyListItemViewModel}">
-             <Border Margin="0,0,0,10" Padding="14" Background="White" BorderBrush="#FFE2E8EC" BorderThickness="1" CornerRadius="14">
-              <StackPanel>
-               <TextBlock FontSize="15" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding Name}"/>
-               <TextBlock Margin="0,6,0,0" FontSize="12" Text="{Binding Summary}"/>
-               <TextBlock Margin="0,6,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding Description}"/>
-               <TextBlock Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource AccentBrush}" Text="{Binding Meta}"/>
-              </StackPanel>
-             </Border>
-            </DataTemplate>
-           </ListBox.ItemTemplate>
-          </ListBox>
-         <ListBox Grid.Row="1" Margin="0,14,0,0" Height="190" Visibility="{Binding CommunityProfilesVisibility}" ItemsSource="{Binding CommunityProfiles}" SelectedItem="{Binding SelectedCommunityProfile, Mode=TwoWay}">
-          <ListBox.ItemTemplate>
-           <DataTemplate DataType="{x:Type viewModels:CommunityProfileListItemViewModel}">
-            <Border Margin="0,0,0,10" Padding="14" Background="White" BorderBrush="#FFE2E8EC" BorderThickness="1" CornerRadius="14">
-             <StackPanel>
-              <TextBlock FontSize="15" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding Name}"/>
-              <TextBlock Margin="0,6,0,0" FontSize="12" Text="{Binding Summary}"/>
-              <TextBlock Margin="0,6,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding Description}"/>
-              <TextBlock Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource AccentBrush}" Text="{Binding Meta}"/>
-             </StackPanel>
-            </Border>
-           </DataTemplate>
-          </ListBox.ItemTemplate>
-         </ListBox>
-         </Grid>
-        </Grid>
-       </Border>
-       <Grid Grid.Row="3"><Grid.ColumnDefinitions><ColumnDefinition Width="0.72*"/><ColumnDefinition Width="1.38*"/></Grid.ColumnDefinitions>
-        <Border Grid.Column="0" Margin="0,0,12,0" Style="{StaticResource CardStyle}" Background="#FFF7FAFB">
-         <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-          <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.LocalDeviceStrategies]}"/>
-          <ListBox Grid.Row="1" Margin="0,12,0,18" Height="170" ItemsSource="{Binding DeviceStrategyPackages}" SelectedItem="{Binding SelectedDeviceStrategyPackage, Mode=TwoWay}">
-           <ListBox.ItemTemplate><DataTemplate DataType="{x:Type viewModels:DeviceStrategyPackageListItemViewModel}"><Border Margin="0,0,0,10" Padding="14" Background="White" BorderBrush="#FFD6E8EF" BorderThickness="1" CornerRadius="14"><StackPanel><TextBlock FontSize="15" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding Name}"/><TextBlock Margin="0,6,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding Summary}"/><TextBlock Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource AccentBrush}" Text="{Binding Meta}"/></StackPanel></Border></DataTemplate></ListBox.ItemTemplate>
-          </ListBox>
-          <TextBlock Grid.Row="2" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.SavedProfiles]}"/>
-          <ListBox Grid.Row="3" Margin="0,16,0,0" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile, Mode=TwoWay}">
-           <ListBox.ItemTemplate><DataTemplate DataType="{x:Type viewModels:ProfileListItemViewModel}"><Border Margin="0,0,0,10" Padding="14" Background="White" BorderBrush="#FFE2E8EC" BorderThickness="1" CornerRadius="14"><StackPanel><TextBlock FontSize="15" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding Name}"/><TextBlock Margin="0,6,0,0" FontSize="12" Text="{Binding Summary}"/><TextBlock Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource AccentBrush}" Text="{Binding EnabledText}"/></StackPanel></Border></DataTemplate></ListBox.ItemTemplate>
-          </ListBox>
-         </Grid>
-        </Border>
-        <Border Grid.Column="1" Margin="12,0,0,0" Style="{StaticResource CardStyle}" Background="#FFFCFDFC"><StackPanel>
-         <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="1*"/><ColumnDefinition Width="1*"/></Grid.ColumnDefinitions>
-          <StackPanel Margin="0,0,10,0"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.ProfileName]}"/><TextBox Text="{Binding ProfileDraft.Name, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"/></StackPanel>
-          <StackPanel Grid.Column="1" Margin="10,0,0,0"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.Version]}"/><TextBox Text="{Binding ProfileDraft.Version, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True, ValidatesOnExceptions=True, NotifyOnValidationError=True}"/></StackPanel>
-         </Grid>
-         <Grid Margin="0,14,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="1*"/><ColumnDefinition Width="1*"/><ColumnDefinition Width="1*"/><ColumnDefinition Width="1*"/></Grid.ColumnDefinitions>
-          <StackPanel Margin="0,0,10,0"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.TargetClassification]}"/><ComboBox ItemsSource="{Binding ClassificationOptions}" DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding ProfileDraft.TargetClassification, Mode=TwoWay, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"/></StackPanel>
-          <StackPanel Grid.Column="1" Margin="10,0,10,0"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.ForegroundPriority]}"/><ComboBox ItemsSource="{Binding PriorityOptions}" DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding ProfileDraft.ForegroundPriority, Mode=TwoWay}"/></StackPanel>
-          <StackPanel Grid.Column="2" Margin="10,0,10,0"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.PowerSourceMode]}"/><ComboBox ItemsSource="{Binding PowerSourceOptions}" DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding ProfileDraft.PowerSourceMode, Mode=TwoWay}"/></StackPanel>
-          <StackPanel Grid.Column="3" Margin="10,0,0,0"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.PowerPlanSelection]}"/><ComboBox ItemsSource="{Binding PowerPlanOptions}" SelectedItem="{Binding ProfileDraft.SelectedPowerPlan, Mode=TwoWay}" DisplayMemberPath="DisplayName"/></StackPanel>
-         </Grid>
-         <StackPanel Margin="0,14,0,0" Orientation="Horizontal">
-          <CheckBox Content="{Binding Strings[Common.Enabled]}" IsChecked="{Binding ProfileDraft.IsEnabled, Mode=TwoWay}"/>
-          <CheckBox Margin="20,10,0,0" Content="{Binding Strings[Hint.RestorePowerPlan]}" IsChecked="{Binding ProfileDraft.RestoreOnExit, Mode=TwoWay}"/>
-          <CheckBox Margin="20,10,0,0" Content="{Binding Strings[Hint.GlobalDefaultProfile]}" IsChecked="{Binding ProfileDraft.IsGlobalDefault, Mode=TwoWay}"/>
-         </StackPanel>
-         <Border Margin="0,14,0,0" Padding="12" Background="#FFF8FCFD" CornerRadius="14">
-          <Border.Style><Style TargetType="Border"><Setter Property="BorderBrush" Value="#FFDCE8EE"/><Setter Property="BorderThickness" Value="1"/><Style.Triggers><DataTrigger Binding="{Binding ProfileDraft.HasPowerPlanIssues}" Value="True"><Setter Property="BorderBrush" Value="{StaticResource ValidationBrush}"/><Setter Property="BorderThickness" Value="2"/></DataTrigger></Style.Triggers></Style></Border.Style>
-          <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="0.72*"/><ColumnDefinition Width="1.28*"/></Grid.ColumnDefinitions>
-           <StackPanel Margin="0,0,10,0"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.ProcessorMaxState]}"/><TextBox Text="{Binding ProfileDraft.ProcessorMaxStatePercentText, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"/></StackPanel>
-           <TextBlock Grid.Column="1" Margin="10,3,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding Strings[Hint.ProcessorMaxState]}"/>
-          </Grid>
-         </Border>
-         <Border Margin="0,14,0,0" Padding="12" Background="#FFFDFEFE" BorderBrush="#FFE0E8EC" BorderThickness="1" CornerRadius="14">
-          <Border.Style><Style TargetType="Border"><Setter Property="BorderBrush" Value="#FFE0E8EC"/><Setter Property="BorderThickness" Value="1"/><Style.Triggers><DataTrigger Binding="{Binding ProfileDraft.HasMatchRuleIssues}" Value="True"><Setter Property="BorderBrush" Value="{StaticResource ValidationBrush}"/><Setter Property="BorderThickness" Value="2"/></DataTrigger></Style.Triggers></Style></Border.Style>
-          <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="1*"/><ColumnDefinition Width="1*"/><ColumnDefinition Width="1*"/></Grid.ColumnDefinitions>
-           <StackPanel Margin="0,0,10,0"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.ExecutableNames]}"/><TextBlock FontSize="12" Text="{Binding Strings[Hint.ExecutableNames]}"/><TextBox Height="120" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" Text="{Binding ProfileDraft.ExecutableNamesText, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"/></StackPanel>
-           <StackPanel Grid.Column="1" Margin="10,0,10,0"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.ProcessNames]}"/><TextBlock FontSize="12" Text="{Binding Strings[Hint.ProcessNames]}"/><TextBox Height="120" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" Text="{Binding ProfileDraft.ProcessNamesText, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"/></StackPanel>
-           <StackPanel Grid.Column="2" Margin="10,0,0,0"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.WindowTitleContains]}"/><TextBlock FontSize="12" Text="{Binding Strings[Hint.WindowTitleContains]}"/><TextBox Height="120" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" Text="{Binding ProfileDraft.WindowTitleContainsText, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"/></StackPanel>
-          </Grid>
-         </Border>
-         <Border Margin="0,14,0,0" Padding="14" Background="#FFF7FAFB" BorderBrush="#FFE0E8EC" BorderThickness="1" CornerRadius="14">
-          <Border.Style><Style TargetType="Border"><Setter Property="BorderBrush" Value="#FFE0E8EC"/><Setter Property="BorderThickness" Value="1"/><Style.Triggers><DataTrigger Binding="{Binding ProfileDraft.HasBackgroundPolicyIssues}" Value="True"><Setter Property="BorderBrush" Value="{StaticResource ValidationBrush}"/><Setter Property="BorderThickness" Value="2"/></DataTrigger></Style.Triggers></Style></Border.Style>
-          <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-           <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.BackgroundPolicies]}"/><TextBlock Margin="0,4,0,0" FontSize="12" Text="{Binding Strings[Hint.BackgroundPolicies]}"/></StackPanel><Button Grid.Column="1" Content="{Binding Strings[Button.AddPolicy]}" Command="{Binding AddBackgroundPolicyCommand}" Background="#FF1F7A5C"/></Grid>
-           <ItemsControl Grid.Row="1" Margin="0,14,0,0" ItemsSource="{Binding ProfileDraft.BackgroundPolicies}">
-            <ItemsControl.ItemTemplate>
-             <DataTemplate DataType="{x:Type viewModels:BackgroundPolicyDraftItemViewModel}">
-              <Border Margin="0,0,0,10" Padding="12" Background="White" BorderBrush="#FFE2E8EC" BorderThickness="1" CornerRadius="12">
-               <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><Grid.ColumnDefinitions><ColumnDefinition Width="1*"/><ColumnDefinition Width="1*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <StackPanel Margin="0,0,10,0"><TextBlock FontSize="12" FontWeight="SemiBold" Text="{Binding DataContext.Strings[Section.Category], RelativeSource={RelativeSource AncestorType=Window}}"/><ComboBox ItemsSource="{Binding DataContext.BackgroundPolicyCategoryOptions, RelativeSource={RelativeSource AncestorType=Window}}" DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding Category, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/></StackPanel>
-                <StackPanel Grid.Column="1" Margin="10,0,10,0"><TextBlock FontSize="12" FontWeight="SemiBold" Text="{Binding DataContext.Strings[Section.TargetPriority], RelativeSource={RelativeSource AncestorType=Window}}"/><ComboBox ItemsSource="{Binding DataContext.PriorityOptions, RelativeSource={RelativeSource AncestorType=Window}}" DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding TargetPriority, Mode=TwoWay}"/></StackPanel>
-                <Button Grid.Column="2" VerticalAlignment="Bottom" Content="{Binding DataContext.Strings[Button.Remove], RelativeSource={RelativeSource AncestorType=Window}}" Command="{Binding DataContext.RemoveBackgroundPolicyCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Background="#FF8A3B49"/>
-                <StackPanel Grid.Row="1" Grid.ColumnSpan="3" Margin="0,12,0,0"><CheckBox Content="{Binding DataContext.Strings[Hint.PreferEfficiencyMode], RelativeSource={RelativeSource AncestorType=Window}}" IsChecked="{Binding PreferEfficiencyMode, Mode=TwoWay}"/><TextBlock Margin="0,8,0,0" FontSize="12" FontWeight="SemiBold" Text="{Binding DataContext.Strings[Section.Notes], RelativeSource={RelativeSource AncestorType=Window}}"/><TextBox MinHeight="64" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Text="{Binding Notes, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/></StackPanel>
-               </Grid>
-              </Border>
-             </DataTemplate>
-            </ItemsControl.ItemTemplate>
-           </ItemsControl>
-          </Grid>
-         </Border>
-         <Border Margin="0,14,0,0" Padding="14" Background="#FFF6F8FD" BorderBrush="#FFDCE3F2" BorderThickness="1" CornerRadius="14">
-          <Border.Style><Style TargetType="Border"><Setter Property="BorderBrush" Value="#FFDCE3F2"/><Setter Property="BorderThickness" Value="1"/><Style.Triggers><DataTrigger Binding="{Binding ProfileDraft.HasGpuIssues}" Value="True"><Setter Property="BorderBrush" Value="{StaticResource ValidationBrush}"/><Setter Property="BorderThickness" Value="2"/></DataTrigger></Style.Triggers></Style></Border.Style>
-          <StackPanel>
-           <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.GpuStrategy]}"/>
-           <TextBlock Margin="0,4,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding Strings[Hint.GpuStrategy]}"/>
-           <Border Margin="0,12,0,0" Padding="12" Background="#FFFFFFFF" BorderBrush="#FFE1E6F0" BorderThickness="1" CornerRadius="12">
-            <StackPanel>
-             <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#FF4E65A8" Text="{Binding GpuAdapterSummary}"/>
-             <TextBlock Margin="0,6,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding GpuCapabilitySummary}"/>
-            </StackPanel>
-           </Border>
-           <Grid Margin="0,14,0,0" IsEnabled="False"><Grid.ColumnDefinitions><ColumnDefinition Width="1.2*"/><ColumnDefinition Width="0.9*"/><ColumnDefinition Width="0.9*"/></Grid.ColumnDefinitions>
-            <StackPanel Margin="0,0,10,0"><TextBlock FontSize="12" FontWeight="SemiBold" Text="{Binding Strings[Section.GpuMode]}"/><ComboBox ItemsSource="{Binding GpuModeOptions}" DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding ProfileDraft.GpuMode, Mode=TwoWay}"/></StackPanel>
-            <StackPanel Grid.Column="1" Margin="10,0,10,0"><TextBlock FontSize="12" FontWeight="SemiBold" Text="{Binding Strings[Section.GpuClockLimit]}"/><TextBox Text="{Binding ProfileDraft.GpuMaxCoreClockMHzText, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"/></StackPanel>
-            <StackPanel Grid.Column="2" Margin="10,0,0,0"><TextBlock FontSize="12" FontWeight="SemiBold" Text="{Binding Strings[Section.GpuVoltageOffset]}"/><TextBox Text="{Binding ProfileDraft.GpuVoltageOffsetMvText, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True, NotifyOnValidationError=True}"/></StackPanel>
-           </Grid>
-           <CheckBox Margin="0,12,0,0" Content="{Binding Strings[Hint.GpuVendorApi]}" IsChecked="{Binding ProfileDraft.GpuAllowVendorApi, Mode=TwoWay}" IsEnabled="False"/>
-           <TextBlock Margin="0,8,0,0" FontSize="12" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Hint.GpuStrategyPlanned]}"/>
-          </StackPanel>
-         </Border>
-         <Grid Margin="0,14,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="1.2*"/><ColumnDefinition Width="0.8*"/></Grid.ColumnDefinitions>
-          <StackPanel Margin="0,0,12,0"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.Notes]}"/><TextBox MinHeight="160" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Text="{Binding ProfileDraft.Notes, UpdateSourceTrigger=PropertyChanged}"/></StackPanel>
-          <StackPanel Grid.Column="1" Margin="12,0,0,0"><TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.Validation]}"/><TextBlock Margin="0,6,0,0" FontSize="12" Text="{Binding ValidationSummary}"/>
-           <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding ValidationIssues}"><ItemsControl.ItemTemplate><DataTemplate><Border Margin="0,0,0,8" Padding="8" Background="#FFFFF4E8" CornerRadius="10"><TextBlock FontSize="12" TextWrapping="Wrap" Text="{Binding}"/></Border></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
-           <TextBlock Margin="0,12,0,0" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.RevisionHistory]}"/>
-           <ListBox Margin="0,8,0,0" Height="170" ItemsSource="{Binding ProfileHistory}" SelectedItem="{Binding SelectedProfileRevision, Mode=TwoWay}">
-            <ListBox.ItemTemplate><DataTemplate DataType="{x:Type models:ProfileRevisionInfo}"><Border Margin="0,0,0,8" Padding="10" Background="#FFF7FAFB" BorderBrush="#FFE1E8EC" BorderThickness="1" CornerRadius="10"><StackPanel><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding DisplayName}"/><TextBlock Margin="0,4,0,0" FontSize="11" Text="{Binding Profile.Notes}" TextTrimming="CharacterEllipsis"/></StackPanel></Border></DataTemplate></ListBox.ItemTemplate>
-           </ListBox>
-          </StackPanel>
-         </Grid>
-        </StackPanel></Border>
-       </Grid>
-      </Grid>
-     </ScrollViewer>
+     <views:StrategyCenterPage/>
     </TabItem>
     <TabItem>
      <TabItem.Header><StackPanel><TextBlock FontSize="17" FontWeight="SemiBold" Foreground="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Foreground}" Text="{Binding DataContext.Strings[Nav.DiagnosticsTitle], RelativeSource={RelativeSource AncestorType=Window}}"/><TextBlock Margin="0,5,0,0" FontSize="12" TextWrapping="Wrap" Foreground="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Foreground}" Opacity="0.78" Text="{Binding DataContext.Strings[Nav.DiagnosticsDescription], RelativeSource={RelativeSource AncestorType=Window}}"/></StackPanel></TabItem.Header>
-     <ScrollViewer VerticalScrollBarVisibility="Auto">
-      <Grid Margin="28"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-       <UniformGrid Columns="4" Margin="0,0,0,20"><Border Margin="0,0,14,0" Style="{StaticResource CardStyle}" Background="#FFF8FBFD"><StackPanel><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.RuntimeStatus]}"/><TextBlock Margin="0,10,0,0" FontSize="15" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding MonitoringModeSummary}"/><TextBlock Margin="0,8,0,0" FontSize="13" TextWrapping="Wrap" Text="{Binding MonitoringStatus}"/><TextBlock Margin="0,10,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding LastRefreshTime}"/></StackPanel></Border><Border Margin="0,0,14,0" Style="{StaticResource CardStyle}" Background="#FFF7FAFB"><StackPanel><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.Storage]}"/><TextBlock Margin="0,10,0,0" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding StorageSummary}"/></StackPanel></Border><Border Margin="0,0,14,0" Style="{StaticResource CardStyle}" Background="#FFF6F8FD"><StackPanel><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#FF4E65A8" Text="{Binding Strings[Section.GpuReadiness]}"/><TextBlock Margin="0,10,0,0" FontSize="16" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding GpuAdapterSummary}"/><TextBlock Margin="0,10,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding GpuCapabilitySummary}"/></StackPanel></Border><Border Style="{StaticResource CardStyle}" Background="#FFF3FAFE"><StackPanel><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#FF277EA3" Text="{Binding Strings[Section.DeviceFingerprint]}"/><TextBlock Margin="0,10,0,0" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource TitleBrush}" Text="{Binding DeviceFingerprintSummary}"/></StackPanel></Border></UniformGrid>
-       <Grid Grid.Row="1"><Grid.ColumnDefinitions><ColumnDefinition Width="0.9*"/><ColumnDefinition Width="1.4*"/></Grid.ColumnDefinitions>
-        <Border Grid.Column="0" Margin="0,0,9,0" Style="{StaticResource CardStyle}"><StackPanel><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.CapabilityDetector]}"/><ItemsControl Margin="0,16,0,0" ItemsSource="{Binding CapabilityLines}"><ItemsControl.ItemTemplate><DataTemplate><Border Margin="0,0,0,10" Padding="12" Background="#FFF5F8FA" CornerRadius="12"><TextBlock FontSize="13" TextWrapping="Wrap" Text="{Binding}"/></Border></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></StackPanel></Border>
-        <Border Grid.Column="1" Margin="9,0,0,0" Style="{StaticResource CardStyle}"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions><StackPanel Orientation="Horizontal"><TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.RecentLogs]}"/><TextBlock Margin="12,0,0,0" FontSize="12" Text="{Binding LastRefreshTime}"/></StackPanel><ListBox Grid.Row="1" Margin="0,16,0,0" ItemsSource="{Binding RecentLogs}"><ListBox.ItemTemplate><DataTemplate DataType="{x:Type models:LogEntry}"><Border Margin="0,0,0,10" Padding="12" Background="#FFF8FAFB" BorderBrush="#FFE3E8EC" BorderThickness="1" CornerRadius="12"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="140"/><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock FontFamily="Consolas" Text="{Binding Timestamp, StringFormat={}{0:HH:mm:ss}}"/><TextBlock Grid.Column="1" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Level}"/><TextBlock Grid.Column="2" TextWrapping="Wrap" Text="{Binding Message}"/></Grid></Border></DataTemplate></ListBox.ItemTemplate></ListBox></Grid></Border>
-       </Grid>
-      </Grid>
-     </ScrollViewer>
+     <views:DiagnosticsPage/>
     </TabItem>
     <TabItem>
      <TabItem.Header><StackPanel><TextBlock FontSize="17" FontWeight="SemiBold" Foreground="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Foreground}" Text="{Binding DataContext.Strings[Nav.AppearanceTitle], RelativeSource={RelativeSource AncestorType=Window}}"/><TextBlock Margin="0,5,0,0" FontSize="12" TextWrapping="Wrap" Foreground="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Foreground}" Opacity="0.78" Text="{Binding DataContext.Strings[Nav.AppearanceDescription], RelativeSource={RelativeSource AncestorType=Window}}"/></StackPanel></TabItem.Header>
@@ -687,119 +462,7 @@
     </TabItem>
     <TabItem>
      <TabItem.Header><StackPanel><TextBlock FontSize="17" FontWeight="SemiBold" Foreground="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Foreground}" Text="{Binding DataContext.Strings[Nav.SettingsTitle], RelativeSource={RelativeSource AncestorType=Window}}"/><TextBlock Margin="0,5,0,0" FontSize="12" TextWrapping="Wrap" Foreground="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Foreground}" Opacity="0.78" Text="{Binding DataContext.Strings[Nav.SettingsDescription], RelativeSource={RelativeSource AncestorType=Window}}"/></StackPanel></TabItem.Header>
-     <ScrollViewer VerticalScrollBarVisibility="Auto">
-      <Grid Margin="28">
-       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-       <Border Style="{StaticResource CardStyle}" Background="#FFF9FCFD">
-        <StackPanel>
-         <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.Settings]}"/>
-         <TextBlock Margin="0,10,0,0" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding MonitoringStatus}"/>
-         <TextBlock Margin="0,10,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding Strings[Hint.SettingsApplyNextLaunch]}"/>
-         <StackPanel Margin="0,14,0,0" Width="260" HorizontalAlignment="Left">
-          <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Section.MonitoringInterval]}"/>
-          <ComboBox ItemsSource="{Binding MonitoringIntervalOptions}" DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding MonitoringIntervalSeconds, Mode=TwoWay}"/>
-          <TextBlock Margin="0,8,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding Strings[Hint.MonitoringInterval]}"/>
-         </StackPanel>
-         <WrapPanel Margin="0,14,0,0">
-          <StackPanel Margin="0,0,18,10">
-           <primitives:ToggleButton Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding IsMonitoringRunning, Mode=OneWay}" Command="{Binding ToggleMonitoringCommand}" IsEnabled="{Binding CanToggleMonitoring}"/>
-           <TextBlock Width="160" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" Text="{Binding MonitoringToggleButtonText}"/>
-          </StackPanel>
-          <Button Content="{Binding Strings[Button.Rollback]}" Command="{Binding RestoreCommand}" Background="#FF8A3B49"/>
-         </WrapPanel>
-         <Border Margin="0,12,0,0" Padding="14" Background="#FFFFFFFF" BorderBrush="#FFE1EAF7" BorderThickness="1" CornerRadius="16">
-          <Grid>
-           <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="130"/></Grid.ColumnDefinitions>
-           <primitives:ToggleButton Grid.Column="0" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding LanguageTransitionAnimationEnabled, Mode=TwoWay}"/>
-           <StackPanel Grid.Column="1" Margin="8,0,18,0">
-            <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.LanguageAnimationSettings]}"/>
-            <TextBlock Margin="0,6,0,0" FontSize="12" TextWrapping="Wrap" Text="{Binding Strings[Hint.LanguageTransitionAnimationEnabled]}"/>
-           </StackPanel>
-           <StackPanel Grid.Column="2">
-            <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Hint.LanguageTransitionDurationSeconds]}"/>
-            <TextBox Width="110" Text="{Binding LanguageTransitionDurationSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Delay=150, ValidatesOnExceptions=True}"/>
-           </StackPanel>
-          </Grid>
-         </Border>
-        </StackPanel>
-       </Border>
-       <UniformGrid Grid.Row="1" Columns="2" Margin="0,0,0,20">
-        <Border Margin="0,0,14,0" Style="{StaticResource CardStyle}" Background="#FFF7FAFB">
-         <StackPanel>
-          <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.SafetySettings]}"/>
-          <DockPanel Margin="0,12,0,0"><primitives:ToggleButton DockPanel.Dock="Left" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding PauseSchedulingAfterUnsafeExit, Mode=TwoWay}"/><TextBlock VerticalAlignment="Center" TextWrapping="Wrap" Text="{Binding Strings[Hint.PauseSchedulingAfterUnsafeExit]}"/></DockPanel>
-          <DockPanel Margin="0,10,0,0"><primitives:ToggleButton DockPanel.Dock="Left" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding AutoRollbackOnUnsafeExit, Mode=TwoWay}"/><TextBlock VerticalAlignment="Center" TextWrapping="Wrap" Text="{Binding Strings[Hint.AutoRollbackOnUnsafeExit]}"/></DockPanel>
-          <DockPanel Margin="0,10,0,0"><primitives:ToggleButton DockPanel.Dock="Left" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding DisableProfileAfterRepeatedUnsafeRuns, Mode=TwoWay}"/><TextBlock VerticalAlignment="Center" TextWrapping="Wrap" Text="{Binding Strings[Hint.DisableProfileAfterRepeatedUnsafeRuns]}"/></DockPanel>
-          <StackPanel Margin="0,14,0,0">
-           <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Hint.UnsafeRunThreshold]}"/>
-           <TextBox Width="120" Text="{Binding UnsafeRunThreshold, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
-          </StackPanel>
-         </StackPanel>
-        </Border>
-        <Border Style="{StaticResource CardStyle}" Background="#FFF6FBFD">
-         <StackPanel>
-          <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.StartupSettings]}"/>
-          <DockPanel Margin="0,12,0,0"><primitives:ToggleButton DockPanel.Dock="Left" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding LaunchAtStartup, Mode=TwoWay}"/><TextBlock VerticalAlignment="Center" TextWrapping="Wrap" Text="{Binding Strings[Hint.LaunchAtStartup]}"/></DockPanel>
-          <DockPanel Margin="0,10,0,0"><primitives:ToggleButton DockPanel.Dock="Left" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding AutoStartMonitoringOnLaunch, Mode=TwoWay}"/><TextBlock VerticalAlignment="Center" TextWrapping="Wrap" Text="{Binding Strings[Hint.AutoStartMonitoringOnLaunch]}"/></DockPanel>
-          <TextBlock Margin="0,14,0,0" FontSize="13" TextWrapping="Wrap" Text="{Binding StorageSummary}"/>
-         </StackPanel>
-        </Border>
-       </UniformGrid>
-       <Border Grid.Row="2" Style="{StaticResource CardStyle}" Background="#FFF8FBFD">
-        <StackPanel>
-         <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.DataLocations]}"/>
-         <TextBlock Margin="0,10,0,0" FontSize="13" TextWrapping="Wrap" FontFamily="Consolas" Text="{Binding DataLocationSummary}"/>
-         <WrapPanel Margin="0,14,0,0">
-         <Button Content="{Binding Strings[Button.OpenProfilesDirectory]}" Command="{Binding OpenProfilesDirectoryCommand}" Background="#FF1E8FA3"/>
-          <Button Content="{Binding Strings[Button.OpenDeviceStrategiesDirectory]}" Command="{Binding OpenDeviceStrategiesDirectoryCommand}" Background="#FF2E9AAE"/>
-          <Button Content="{Binding Strings[Button.OpenRuntimeDirectory]}" Command="{Binding OpenRuntimeDirectoryCommand}" Background="#FF4E7080"/>
-          <Button Content="{Binding Strings[Button.OpenLogsDirectory]}" Command="{Binding OpenLogsDirectoryCommand}" Background="#FF6A86B7"/>
-          <Button Content="{Binding Strings[Button.OpenApplicationDirectory]}" Command="{Binding OpenApplicationDirectoryCommand}" Background="#FF9B6A18"/>
-         </WrapPanel>
-        </StackPanel>
-       </Border>
-       <Border Grid.Row="3" Style="{StaticResource CardStyle}" Background="#FFFCFDFC">
-        <StackPanel>
-         <Grid>
-          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-          <StackPanel>
-           <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Strings[Section.StatusCenter]}"/>
-           <TextBlock Margin="0,10,0,0" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding StatusCenterSummary}"/>
-           <TextBlock Margin="0,10,0,0" FontSize="13" TextWrapping="Wrap" Text="{Binding MonitoringStatus}"/>
-          </StackPanel>
-          <Button Grid.Column="1" Content="{Binding Strings[Button.ClearStatusCenter]}" Command="{Binding ClearStatusCenterCommand}" Background="#FF4E7080"/>
-         </Grid>
-         <ListBox Margin="0,16,0,0" Height="260" ItemsSource="{Binding StatusCenterItems}">
-          <ListBox.ItemTemplate>
-           <DataTemplate DataType="{x:Type viewModels:StatusCenterItemViewModel}">
-            <Border Margin="0,0,0,10" Padding="12" Background="#FFF8FAFB" BorderBrush="#FFE3E8EC" BorderThickness="1" CornerRadius="12">
-             <Grid>
-              <Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="130"/><ColumnDefinition Width="120"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-              <TextBlock FontFamily="Consolas" Text="{Binding Timestamp, StringFormat={}{0:MM-dd HH:mm:ss}}"/>
-              <TextBlock Grid.Column="1" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="{Binding Source}"/>
-              <Border Grid.Column="2" Padding="8,2" HorizontalAlignment="Left" CornerRadius="999">
-               <Border.Style>
-                <Style TargetType="Border">
-                 <Setter Property="Background" Value="#FFE8F0F4"/>
-                 <Style.Triggers>
-                  <DataTrigger Binding="{Binding LevelKey}" Value="Success"><Setter Property="Background" Value="#FFE4F5E8"/></DataTrigger>
-                  <DataTrigger Binding="{Binding LevelKey}" Value="Warning"><Setter Property="Background" Value="#FFFFF1D9"/></DataTrigger>
-                  <DataTrigger Binding="{Binding LevelKey}" Value="Error"><Setter Property="Background" Value="#FFFBE1E4"/></DataTrigger>
-                 </Style.Triggers>
-                </Style>
-               </Border.Style>
-               <TextBlock FontWeight="SemiBold" Text="{Binding Level}"/>
-              </Border>
-              <TextBlock Grid.Column="3" TextWrapping="Wrap" Text="{Binding Message}"/>
-             </Grid>
-            </Border>
-           </DataTemplate>
-          </ListBox.ItemTemplate>
-         </ListBox>
-        </StackPanel>
-       </Border>
-      </Grid>
-     </ScrollViewer>
+     <views:SettingsPage/>
     </TabItem>
    </TabControl>
   </Border>

@@ -61,8 +61,9 @@ public sealed class CapabilityDetector : ICapabilityDetector
             ProviderName = gpuProviderSupport.ProviderName,
             SupportsVendorExtensions = gpuProviderSupport.SupportsVendorExtensions,
             SupportsApplyPipeline = gpuProviderSupport.SupportsApplyPipeline,
-            SupportsClockLimit = gpuProviderSupport.SupportsClockLimit,
-            SupportsVoltageControl = gpuProviderSupport.SupportsVoltageControl,
+            SupportedFeatures = gpuProviderSupport.SupportedFeatures
+                .Distinct()
+                .ToArray(),
             StatusKey = gpuProviderSupport.StatusKey
         };
         var unsupportedReasons = new List<string>();
@@ -72,7 +73,7 @@ public sealed class CapabilityDetector : ICapabilityDetector
             unsupportedReasons.Add("No switchable power plans were detected.");
         }
 
-        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 16299))
         {
             unsupportedReasons.Add("Efficiency mode hint is not exposed on this Windows build.");
         }
@@ -96,7 +97,7 @@ public sealed class CapabilityDetector : ICapabilityDetector
             SupportsPriorityBoost = OperatingSystem.IsWindows(),
             SupportsRollback = true,
             SupportsMetricsCollection = true,
-            SupportsEfficiencyModeHint = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000),
+            SupportsEfficiencyModeHint = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 16299),
             Gpu = gpu,
             AvailablePowerPlans = powerPlans,
             UnsupportedReasons = unsupportedReasons
