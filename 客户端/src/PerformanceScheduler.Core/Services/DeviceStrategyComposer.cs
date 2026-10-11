@@ -52,14 +52,51 @@ public sealed class DeviceStrategyComposer
         };
     }
 
-    public DeviceStrategyPackage CreateFromProfiles(
+    public DeviceStrategyPackage CreateBlank(
         string name,
         DeviceFingerprint targetDevice,
-        IEnumerable<PerformanceProfile> profiles)
+        string author = "Local",
+        string summary = "")
     {
         return new DeviceStrategyPackage
         {
+            PackageId = Guid.NewGuid().ToString("N"),
             Name = name,
+            Author = author,
+            Summary = summary,
+            IsEnabled = false,
+            TargetDevice = targetDevice,
+            Profiles = Array.Empty<DeviceStrategyProfileItem>(),
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+    }
+
+    public DeviceStrategyPackage Duplicate(DeviceStrategyPackage source)
+    {
+        return source with
+        {
+            PackageId = Guid.NewGuid().ToString("N"),
+            Name = $"{source.Name} - 副本",
+            IsEnabled = false,
+            Version = 1,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+    }
+
+    public DeviceStrategyPackage CreateFromProfiles(
+        string name,
+        DeviceFingerprint targetDevice,
+        IEnumerable<PerformanceProfile> profiles,
+        string author = "Local",
+        string summary = "")
+    {
+        return new DeviceStrategyPackage
+        {
+            PackageId = Guid.NewGuid().ToString("N"),
+            Name = name,
+            Author = author,
+            Summary = summary,
+            IsEnabled = false,
             TargetDevice = targetDevice,
             Profiles = profiles
                 .Select(profile => new DeviceStrategyProfileItem
@@ -68,7 +105,8 @@ public sealed class DeviceStrategyComposer
                     Source = DeviceStrategyProfileSource.UserAdded,
                     Profile = profile
                 })
-                .ToArray()
+                .ToArray(),
+            UpdatedAt = DateTimeOffset.UtcNow
         };
     }
 

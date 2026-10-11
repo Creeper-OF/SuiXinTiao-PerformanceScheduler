@@ -104,6 +104,16 @@ public sealed partial class MainWindowViewModel : ObservableObject, IAsyncDispos
     private double? _focusedAppGpuUsagePercent;
     private double? _focusedAppFps;
     private string _currentPowerSourceLabel = string.Empty;
+    private string _currentAppAcProfileName = string.Empty;
+    private string _currentAppAcStatusText = string.Empty;
+    private string _currentAppAcStatusBackground = "#FFEAF2FF";
+    private string _currentAppAcStatusForeground = "#FF0066CC";
+    private bool _isCurrentAppAcConfigured;
+    private string _currentAppDcProfileName = string.Empty;
+    private string _currentAppDcStatusText = string.Empty;
+    private string _currentAppDcStatusBackground = "#FFEAF2FF";
+    private string _currentAppDcStatusForeground = "#FF0066CC";
+    private bool _isCurrentAppDcConfigured;
     private int _selectedGlobalPolicyDomainIndex;
     private PowerPlanOptionViewModel? _globalAcPowerPlan;
     private PowerPlanOptionViewModel? _globalDcPowerPlan;
@@ -287,6 +297,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IAsyncDispos
             () => _configurationRecoverySafetyGate.RequiresManualAction,
             HandleCommandException);
         CreateDeviceStrategyPackageCommand = new AsyncCommand(CreateDeviceStrategyPackageAsync, onException: HandleCommandException);
+        CreateBlankDeviceStrategyPackageCommand = new AsyncCommand(CreateBlankDeviceStrategyPackageAsync, onException: HandleCommandException);
+        DuplicateSelectedDeviceStrategyPackageCommand = new AsyncCommand(DuplicateSelectedDeviceStrategyPackageAsync, onException: HandleCommandException);
         ExportSelectedDeviceStrategyPackageCommand = new AsyncCommand(ExportSelectedDeviceStrategyPackageAsync, onException: HandleCommandException);
         ToggleDeviceStrategyPackageCommand = new AsyncCommand(ToggleSelectedDeviceStrategyPackageAsync, onException: HandleCommandException);
         AddProfileToDeviceStrategyCommand = new AsyncCommand(AddSelectedProfileToDeviceStrategyAsync, onException: HandleCommandException);
@@ -546,6 +558,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IAsyncDispos
 
     public ICommand CreateDeviceStrategyPackageCommand { get; }
 
+    public ICommand CreateBlankDeviceStrategyPackageCommand { get; }
+
+    public ICommand DuplicateSelectedDeviceStrategyPackageCommand { get; }
+
     public ICommand ExportSelectedDeviceStrategyPackageCommand { get; }
 
     public ICommand ToggleDeviceStrategyPackageCommand { get; }
@@ -748,6 +764,66 @@ public sealed partial class MainWindowViewModel : ObservableObject, IAsyncDispos
     {
         get => _matchedProfileName;
         private set => SetProperty(ref _matchedProfileName, value);
+    }
+
+    public string CurrentAppAcProfileName
+    {
+        get => _currentAppAcProfileName;
+        private set => SetProperty(ref _currentAppAcProfileName, value);
+    }
+
+    public string CurrentAppAcStatusText
+    {
+        get => _currentAppAcStatusText;
+        private set => SetProperty(ref _currentAppAcStatusText, value);
+    }
+
+    public string CurrentAppAcStatusBackground
+    {
+        get => _currentAppAcStatusBackground;
+        private set => SetProperty(ref _currentAppAcStatusBackground, value);
+    }
+
+    public string CurrentAppAcStatusForeground
+    {
+        get => _currentAppAcStatusForeground;
+        private set => SetProperty(ref _currentAppAcStatusForeground, value);
+    }
+
+    public bool IsCurrentAppAcConfigured
+    {
+        get => _isCurrentAppAcConfigured;
+        private set => SetProperty(ref _isCurrentAppAcConfigured, value);
+    }
+
+    public string CurrentAppDcProfileName
+    {
+        get => _currentAppDcProfileName;
+        private set => SetProperty(ref _currentAppDcProfileName, value);
+    }
+
+    public string CurrentAppDcStatusText
+    {
+        get => _currentAppDcStatusText;
+        private set => SetProperty(ref _currentAppDcStatusText, value);
+    }
+
+    public string CurrentAppDcStatusBackground
+    {
+        get => _currentAppDcStatusBackground;
+        private set => SetProperty(ref _currentAppDcStatusBackground, value);
+    }
+
+    public string CurrentAppDcStatusForeground
+    {
+        get => _currentAppDcStatusForeground;
+        private set => SetProperty(ref _currentAppDcStatusForeground, value);
+    }
+
+    public bool IsCurrentAppDcConfigured
+    {
+        get => _isCurrentAppDcConfigured;
+        private set => SetProperty(ref _isCurrentAppDcConfigured, value);
     }
 
     public string ProfileReason
@@ -2619,6 +2695,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IAsyncDispos
             : T("Status.Unknown");
         LastSummary = BuildLocalizedResultSummary(result);
         LastRefreshTime = F("Status.LastScanFormat", result.OccurredAt.LocalDateTime);
+        RefreshCurrentAppProfilesState();
     }
 
     private string BuildLocalizedResultSummary(SchedulerRunResult result)

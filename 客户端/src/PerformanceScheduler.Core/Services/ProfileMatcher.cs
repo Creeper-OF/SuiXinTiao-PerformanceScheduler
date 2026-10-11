@@ -17,15 +17,21 @@ public sealed class ProfileMatcher
             {
                 if (profile.PowerSourceMode == app.PowerSourceMode)
                 {
-                    exactGlobalDefaultProfile ??= profile;
+                    if (exactGlobalDefaultProfile is null ||
+                        profile.Version > exactGlobalDefaultProfile.Version ||
+                        (profile.Version == exactGlobalDefaultProfile.Version && string.CompareOrdinal(profile.Id, exactGlobalDefaultProfile.Id) < 0))
+                    {
+                        exactGlobalDefaultProfile = profile;
+                    }
                 }
-                else if (profile.PowerSourceMode == PowerSourceMode.Any)
+                else if (profile.PowerSourceMode == PowerSourceMode.Any || MatchesPowerSource(app, profile))
                 {
-                    anyGlobalDefaultProfile ??= profile;
-                }
-                else if (MatchesPowerSource(app, profile))
-                {
-                    anyGlobalDefaultProfile ??= profile;
+                    if (anyGlobalDefaultProfile is null ||
+                        profile.Version > anyGlobalDefaultProfile.Version ||
+                        (profile.Version == anyGlobalDefaultProfile.Version && string.CompareOrdinal(profile.Id, anyGlobalDefaultProfile.Id) < 0))
+                    {
+                        anyGlobalDefaultProfile = profile;
+                    }
                 }
 
                 continue;
@@ -57,7 +63,24 @@ public sealed class ProfileMatcher
                 }
                 else
                 {
-                    isBetterMatch = score > bestMatch.Score;
+                    if (score != bestMatch.Score)
+                    {
+                        isBetterMatch = score > bestMatch.Score;
+                    }
+                    else
+                    {
+                        // Deterministic tie-breaking:
+                        // 1. Higher Version wins
+                        // 2. Lexicographically smaller Profile.Id wins
+                        if (profile.Version != bestMatch.Profile.Version)
+                        {
+                            isBetterMatch = profile.Version > bestMatch.Profile.Version;
+                        }
+                        else
+                        {
+                            isBetterMatch = string.CompareOrdinal(profile.Id, bestMatch.Profile.Id) < 0;
+                        }
+                    }
                 }
             }
 
@@ -112,20 +135,13 @@ public sealed class ProfileMatcher
         var reasons = new List<ProfileMatchReason>();
         var executableName = Path.GetFileName(app.ExecutablePath ?? string.Empty);
         var match = profile.Match ?? new ProfileMatchCriteria();
-
-        if (profile.PowerSourceMode != PowerSourceMode.Any)
-        {
-            reasons.Add(CreateReason(
-                ProfileMatchReasonKind.PowerSource,
-                15,
-                profile.PowerSourceMode.ToString(),
-                app.PowerSourceMode.ToString()));
-        }
+        bool hasAppMatch = false;
 
         var executableRule = (match.ExecutableNames ?? Array.Empty<string>()).FirstOrDefault(
             name => EqualsIgnoreCase(name, executableName));
         if (executableRule is not null)
         {
+            hasAppMatch = true;
             reasons.Add(CreateReason(
                 ProfileMatchReasonKind.ExecutableName,
                 100,
@@ -137,6 +153,7 @@ public sealed class ProfileMatcher
             name => EqualsIgnoreCase(name, app.ProcessName));
         if (processRule is not null)
         {
+            hasAppMatch = true;
             reasons.Add(CreateReason(
                 ProfileMatchReasonKind.ProcessName,
                 80,
@@ -148,6 +165,7 @@ public sealed class ProfileMatcher
             fragment => ContainsIgnoreCase(app.WindowTitle, fragment));
         if (titleRule is not null)
         {
+            hasAppMatch = true;
             reasons.Add(CreateReason(
                 ProfileMatchReasonKind.WindowTitle,
                 40,
@@ -157,6 +175,7 @@ public sealed class ProfileMatcher
 
         if ((match.Classifications ?? Array.Empty<ProcessClassification>()).Contains(app.Classification))
         {
+            hasAppMatch = true;
             reasons.Add(CreateReason(
                 ProfileMatchReasonKind.Classification,
                 30,
@@ -167,11 +186,26 @@ public sealed class ProfileMatcher
         if (profile.TargetClassification != ProcessClassification.Unknown &&
             profile.TargetClassification == app.Classification)
         {
+            hasAppMatch = true;
             reasons.Add(CreateReason(
                 ProfileMatchReasonKind.TargetClassification,
                 20,
                 profile.TargetClassification.ToString(),
                 app.Classification.ToString()));
+        }
+
+        if (!hasAppMatch)
+        {
+            return Array.Empty<ProfileMatchReason>();
+        }
+
+        if (profile.PowerSourceMode != PowerSourceMode.Any)
+        {
+            reasons.Insert(0, CreateReason(
+                ProfileMatchReasonKind.PowerSource,
+                15,
+                profile.PowerSourceMode.ToString(),
+                app.PowerSourceMode.ToString()));
         }
 
         return reasons;

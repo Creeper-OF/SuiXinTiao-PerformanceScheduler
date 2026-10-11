@@ -105,5 +105,48 @@ public sealed class DeviceStrategyComposerTests
         Assert.Contains(package.Profiles, item => item.Profile.Id == "global" && item.Role == DeviceStrategyProfileRole.GlobalDefault);
         Assert.Contains(package.Profiles, item => item.Profile.Id == "battery" && item.Role == DeviceStrategyProfileRole.BatteryDefault);
         Assert.Contains(package.Profiles, item => item.Profile.Id == "ac" && item.Role == DeviceStrategyProfileRole.PluggedInDefault);
+        Assert.False(package.IsEnabled);
+    }
+
+    [Fact]
+    public void CreateBlank_CreatesDisabledPackageWithEmptyProfiles()
+    {
+        var composer = new DeviceStrategyComposer();
+        var fp = new DeviceFingerprint { Model = "TestDevice" };
+
+        var package = composer.CreateBlank("BlankPack", fp, "AuthorA", "SummaryA");
+
+        Assert.Equal("BlankPack", package.Name);
+        Assert.Equal("AuthorA", package.Author);
+        Assert.Equal("SummaryA", package.Summary);
+        Assert.False(package.IsEnabled);
+        Assert.Empty(package.Profiles);
+        Assert.Equal("TestDevice", package.TargetDevice.Model);
+    }
+
+    [Fact]
+    public void Duplicate_ClonesPackageWithNewIdAndDisabledByDefault()
+    {
+        var composer = new DeviceStrategyComposer();
+        var original = new DeviceStrategyPackage
+        {
+            PackageId = "orig-id",
+            Name = "Original Package",
+            IsEnabled = true,
+            Version = 3,
+            Profiles = new[]
+            {
+                new DeviceStrategyProfileItem { ItemId = "p1", Profile = new PerformanceProfile { Id = "prof1" } }
+            }
+        };
+
+        var duplicated = composer.Duplicate(original);
+
+        Assert.NotEqual("orig-id", duplicated.PackageId);
+        Assert.Equal("Original Package - 副本", duplicated.Name);
+        Assert.False(duplicated.IsEnabled);
+        Assert.Equal(1, duplicated.Version);
+        Assert.Single(duplicated.Profiles);
+        Assert.Equal("prof1", duplicated.Profiles[0].Profile.Id);
     }
 }

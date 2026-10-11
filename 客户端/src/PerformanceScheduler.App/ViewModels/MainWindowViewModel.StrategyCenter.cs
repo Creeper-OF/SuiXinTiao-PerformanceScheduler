@@ -54,6 +54,7 @@ public sealed partial class MainWindowViewModel
         }
 
         RefreshStorageSummary();
+        RefreshCurrentAppProfilesState();
     }
 
     private async Task LoadDeviceStrategyPackagesAsync(CancellationToken cancellationToken)
@@ -157,6 +158,43 @@ public sealed partial class MainWindowViewModel
         SelectedDeviceStrategyPackage = DeviceStrategyPackages.FirstOrDefault(item =>
             string.Equals(item.Package.PackageId, package.PackageId, StringComparison.OrdinalIgnoreCase));
         SetProfileEditorStatus("Status.CreatedDeviceStrategyPackage", package.Name, package.Profiles.Count);
+    }
+
+    private async Task CreateBlankDeviceStrategyPackageAsync()
+    {
+        var device = await _deviceFingerprintProvider.GetCurrentAsync();
+        var deviceName = string.IsNullOrWhiteSpace(device.Model)
+            ? T("Status.Unknown")
+            : device.Model;
+        var package = _deviceStrategyComposer.CreateBlank(
+            $"{deviceName} 空白策略包",
+            device,
+            "Local",
+            "空白机型策略包，可自由添加或组织各场景性能方案");
+
+        await RunConfigurationImportAsync(() => _deviceStrategyPackageStore.SavePackageAsync(package));
+        await LoadDeviceStrategyPackagesAsync(CancellationToken.None);
+        SelectedDeviceStrategyPackage = DeviceStrategyPackages.FirstOrDefault(item =>
+            string.Equals(item.Package.PackageId, package.PackageId, StringComparison.OrdinalIgnoreCase));
+        SetProfileEditorStatus("Status.CreatedDeviceStrategyPackage", package.Name, package.Profiles.Count);
+    }
+
+    private async Task DuplicateSelectedDeviceStrategyPackageAsync()
+    {
+        if (SelectedDeviceStrategyPackage is null)
+        {
+            SetProfileEditorStatus("Status.SelectDeviceStrategyPackage");
+            return;
+        }
+
+        var sourcePackage = SelectedDeviceStrategyPackage.Package;
+        var clonedPackage = _deviceStrategyComposer.Duplicate(sourcePackage);
+
+        await RunConfigurationImportAsync(() => _deviceStrategyPackageStore.SavePackageAsync(clonedPackage));
+        await LoadDeviceStrategyPackagesAsync(CancellationToken.None);
+        SelectedDeviceStrategyPackage = DeviceStrategyPackages.FirstOrDefault(item =>
+            string.Equals(item.Package.PackageId, clonedPackage.PackageId, StringComparison.OrdinalIgnoreCase));
+        SetProfileEditorStatus("Status.CreatedDeviceStrategyPackage", clonedPackage.Name, clonedPackage.Profiles.Count);
     }
 
     private async Task AddSelectedProfileToDeviceStrategyAsync()
@@ -395,6 +433,36 @@ public sealed partial class MainWindowViewModel
         }
 
         var package = SelectedDeviceStrategyPackage.Package;
+        if (package.Profiles.Count == 0)
+        {
+            MessageBox.Show(
+                "当前策略包未包含任何性能方案，无法导出空包。",
+                T("Dialog.ExportDeviceStrategyPackageTitle"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        var safetyErrors = new List<string>();
+        foreach (var item in package.Profiles)
+        {
+            var evaluation = ProfileSafetyValidator.Evaluate(item.Profile);
+            if (!evaluation.CanPersist)
+            {
+                safetyErrors.Add($"{item.Profile.Name}: {string.Join("; ", evaluation.Errors.Select(GetProfileSafetyIssueText))}");
+            }
+        }
+
+        if (safetyErrors.Count > 0)
+        {
+            MessageBox.Show(
+                $"策略包中存在无法通过安全验证的方案，请修复后再导出：\n{string.Join(Environment.NewLine, safetyErrors)}",
+                T("Dialog.ExportDeviceStrategyPackageTitle"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            return;
+        }
+
         var safeName = string.Join("_", package.Name.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries));
         var dialog = new SaveFileDialog
         {
@@ -1165,11 +1233,69 @@ public sealed partial class MainWindowViewModel
 
         foreach (var p in matchingProfiles)
         {
-            var updated = p with { IsEnabled = false };
-            await RunConfigurationImportAsync(() => _profileManager.SaveProfileAsync(updated));
+            var otherProcesses = (p.Match?.ProcessNames ?? Array.Empty<string>())
+                .Where(n => !string.Equals(n, appName, StringComparison.OrdinalIgnoreCase)).ToArray();
+            var otherExes = (p.Match?.ExecutableNames ?? Array.Empty<string>())
+                .Where(n => !string.Equals(n, exeName, StringComparison.OrdinalIgnoreCase)).ToArray();
+            var hasOtherMatches = otherProcesses.Length > 0 || otherExes.Length > 0 || (p.Match?.WindowTitleContains?.Count ?? 0) > 0 || (p.Match?.Classifications?.Count ?? 0) > 0;
+
+            if (p.PowerSourceMode == PowerSourceMode.Any)
+            {
+                if (hasOtherMatches)
+                {
+                    var stripped = p with
+                    {
+                        Match = (p.Match ?? new ProfileMatchCriteria()) with
+                        {
+                            ProcessNames = otherProcesses,
+                            ExecutableNames = otherExes
+                        }
+                    };
+                    await RunConfigurationImportAsync(() => _profileManager.SaveProfileAsync(stripped));
+
+                    var dcOnlyProfile = p with
+                    {
+                        Id = Guid.NewGuid().ToString("N"),
+                        Name = $"{p.Name} (DC专属保留)",
+                        PowerSourceMode = PowerSourceMode.Battery,
+                        Match = new ProfileMatchCriteria
+                        {
+                            ProcessNames = [appName],
+                            ExecutableNames = [exeName]
+                        }
+                    };
+                    await RunConfigurationImportAsync(() => _profileManager.SaveProfileAsync(dcOnlyProfile));
+                }
+                else
+                {
+                    var dcConverted = p with { PowerSourceMode = PowerSourceMode.Battery };
+                    await RunConfigurationImportAsync(() => _profileManager.SaveProfileAsync(dcConverted));
+                }
+            }
+            else
+            {
+                if (hasOtherMatches)
+                {
+                    var updated = p with
+                    {
+                        Match = (p.Match ?? new ProfileMatchCriteria()) with
+                        {
+                            ProcessNames = otherProcesses,
+                            ExecutableNames = otherExes
+                        }
+                    };
+                    await RunConfigurationImportAsync(() => _profileManager.SaveProfileAsync(updated));
+                }
+                else
+                {
+                    var updated = p with { IsEnabled = false };
+                    await RunConfigurationImportAsync(() => _profileManager.SaveProfileAsync(updated));
+                }
+            }
         }
 
         await LoadProfilesAsync();
+        RefreshCurrentAppProfilesState();
         SetProfileEditorStatus("Status.CurrentAppAcReset", appName);
     }
 
@@ -1211,17 +1337,75 @@ public sealed partial class MainWindowViewModel
         var profiles = await _profileManager.LoadProfilesAsync();
         var matchingProfiles = profiles.Where(p =>
             !p.IsGlobalDefault &&
-            p.PowerSourceMode == PowerSourceMode.Battery &&
+            (p.PowerSourceMode == PowerSourceMode.Battery || p.PowerSourceMode == PowerSourceMode.Any) &&
             ((p.Match?.ProcessNames?.Any(n => string.Equals(n, appName, StringComparison.OrdinalIgnoreCase)) == true) ||
              (p.Match?.ExecutableNames?.Any(n => string.Equals(n, exeName, StringComparison.OrdinalIgnoreCase)) == true))).ToArray();
 
         foreach (var p in matchingProfiles)
         {
-            var updated = p with { IsEnabled = false };
-            await RunConfigurationImportAsync(() => _profileManager.SaveProfileAsync(updated));
+            var otherProcesses = (p.Match?.ProcessNames ?? Array.Empty<string>())
+                .Where(n => !string.Equals(n, appName, StringComparison.OrdinalIgnoreCase)).ToArray();
+            var otherExes = (p.Match?.ExecutableNames ?? Array.Empty<string>())
+                .Where(n => !string.Equals(n, exeName, StringComparison.OrdinalIgnoreCase)).ToArray();
+            var hasOtherMatches = otherProcesses.Length > 0 || otherExes.Length > 0 || (p.Match?.WindowTitleContains?.Count ?? 0) > 0 || (p.Match?.Classifications?.Count ?? 0) > 0;
+
+            if (p.PowerSourceMode == PowerSourceMode.Any)
+            {
+                if (hasOtherMatches)
+                {
+                    var stripped = p with
+                    {
+                        Match = (p.Match ?? new ProfileMatchCriteria()) with
+                        {
+                            ProcessNames = otherProcesses,
+                            ExecutableNames = otherExes
+                        }
+                    };
+                    await RunConfigurationImportAsync(() => _profileManager.SaveProfileAsync(stripped));
+
+                    var acOnlyProfile = p with
+                    {
+                        Id = Guid.NewGuid().ToString("N"),
+                        Name = $"{p.Name} (AC专属保留)",
+                        PowerSourceMode = PowerSourceMode.Ac,
+                        Match = new ProfileMatchCriteria
+                        {
+                            ProcessNames = [appName],
+                            ExecutableNames = [exeName]
+                        }
+                    };
+                    await RunConfigurationImportAsync(() => _profileManager.SaveProfileAsync(acOnlyProfile));
+                }
+                else
+                {
+                    var acConverted = p with { PowerSourceMode = PowerSourceMode.Ac };
+                    await RunConfigurationImportAsync(() => _profileManager.SaveProfileAsync(acConverted));
+                }
+            }
+            else
+            {
+                if (hasOtherMatches)
+                {
+                    var updated = p with
+                    {
+                        Match = (p.Match ?? new ProfileMatchCriteria()) with
+                        {
+                            ProcessNames = otherProcesses,
+                            ExecutableNames = otherExes
+                        }
+                    };
+                    await RunConfigurationImportAsync(() => _profileManager.SaveProfileAsync(updated));
+                }
+                else
+                {
+                    var updated = p with { IsEnabled = false };
+                    await RunConfigurationImportAsync(() => _profileManager.SaveProfileAsync(updated));
+                }
+            }
         }
 
         await LoadProfilesAsync();
+        RefreshCurrentAppProfilesState();
         SetProfileEditorStatus("Status.CurrentAppDcReset", appName);
     }
 
@@ -1232,29 +1416,30 @@ public sealed partial class MainWindowViewModel
 
         // 1. Save or Update AC Global Default Profile
         var existingAc = profiles.FirstOrDefault(p => p.IsGlobalDefault && p.PowerSourceMode == PowerSourceMode.Ac);
-        var acProfile = (existingAc ?? new PerformanceProfile
+        var baseAc = existingAc ?? new PerformanceProfile
         {
             Id = Guid.NewGuid().ToString("N"),
             Name = "全局插电 AC 默认策略",
             IsGlobalDefault = true,
             PowerSourceMode = PowerSourceMode.Ac
-        }) with
+        };
+        var acProfile = baseAc with
         {
             IsEnabled = true,
-            PowerPlan = (existingAc?.PowerPlan ?? new PowerPlanPreference()) with
+            PowerPlan = (baseAc.PowerPlan ?? new PowerPlanPreference()) with
             {
                 SchemeGuid = GlobalAcPowerPlan?.SchemeGuid,
-                Advanced = new PowerPlanAdvancedPreference
+                Advanced = (baseAc.PowerPlan?.Advanced ?? new PowerPlanAdvancedPreference()) with
                 {
                     ProcessorMaxStatePercent = GlobalAcProcessorMaxStatePercent
                 }
             },
-            Priority = (existingAc?.Priority ?? new PriorityPreference()) with
+            Priority = (baseAc.Priority ?? new PriorityPreference()) with
             {
                 ForegroundPriority = GlobalAcPriority,
                 LowerBackgroundProcesses = GlobalAcLowerBackground
             },
-            Gpu = (existingAc?.Gpu ?? new GpuPreference()) with
+            Gpu = (baseAc.Gpu ?? new GpuPreference()) with
             {
                 Mode = GlobalAcGpuMode
             }
@@ -1262,29 +1447,30 @@ public sealed partial class MainWindowViewModel
 
         // 2. Save or Update DC Global Default Profile
         var existingDc = profiles.FirstOrDefault(p => p.IsGlobalDefault && p.PowerSourceMode == PowerSourceMode.Battery);
-        var dcProfile = (existingDc ?? new PerformanceProfile
+        var baseDc = existingDc ?? new PerformanceProfile
         {
             Id = Guid.NewGuid().ToString("N"),
             Name = "全局离电 DC 默认策略",
             IsGlobalDefault = true,
             PowerSourceMode = PowerSourceMode.Battery
-        }) with
+        };
+        var dcProfile = baseDc with
         {
             IsEnabled = true,
-            PowerPlan = (existingDc?.PowerPlan ?? new PowerPlanPreference()) with
+            PowerPlan = (baseDc.PowerPlan ?? new PowerPlanPreference()) with
             {
                 SchemeGuid = GlobalDcPowerPlan?.SchemeGuid,
-                Advanced = new PowerPlanAdvancedPreference
+                Advanced = (baseDc.PowerPlan?.Advanced ?? new PowerPlanAdvancedPreference()) with
                 {
                     ProcessorMaxStatePercent = GlobalDcProcessorMaxStatePercent
                 }
             },
-            Priority = (existingDc?.Priority ?? new PriorityPreference()) with
+            Priority = (baseDc.Priority ?? new PriorityPreference()) with
             {
                 ForegroundPriority = GlobalDcPriority,
                 LowerBackgroundProcesses = GlobalDcLowerBackground
             },
-            Gpu = (existingDc?.Gpu ?? new GpuPreference()) with
+            Gpu = (baseDc.Gpu ?? new GpuPreference()) with
             {
                 Mode = GlobalDcGpuMode
             }
@@ -1323,6 +1509,101 @@ public sealed partial class MainWindowViewModel
             GlobalDcGpuMode = dc.Gpu.Mode;
             GlobalDcPriority = dc.Priority.ForegroundPriority;
             GlobalDcLowerBackground = dc.Priority.LowerBackgroundProcesses;
+        }
+    }
+
+    public void RefreshCurrentAppProfilesState()
+    {
+        var app = _lastRunResult?.ActiveApp;
+        var appName = app?.ProcessName ?? (string.IsNullOrWhiteSpace(FocusedAppName) || FocusedAppName == T("Status.ForegroundAppUnavailable") ? string.Empty : FocusedAppName);
+        var exeName = !string.IsNullOrWhiteSpace(app?.ExecutablePath) ? System.IO.Path.GetFileName(app.ExecutablePath) : (!string.IsNullOrEmpty(appName) && !appName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? $"{appName}.exe" : appName);
+
+        if (string.IsNullOrWhiteSpace(appName))
+        {
+            CurrentAppAcProfileName = "未识别到前台应用";
+            CurrentAppAcStatusText = "无应用焦点";
+            CurrentAppAcStatusBackground = "#FFF5F7FA";
+            CurrentAppAcStatusForeground = "#FF8896A6";
+            IsCurrentAppAcConfigured = false;
+
+            CurrentAppDcProfileName = "未识别到前台应用";
+            CurrentAppDcStatusText = "无应用焦点";
+            CurrentAppDcStatusBackground = "#FFF5F7FA";
+            CurrentAppDcStatusForeground = "#FF8896A6";
+            IsCurrentAppDcConfigured = false;
+            return;
+        }
+
+        var allProfiles = Profiles.Select(vm => vm.Profile).ToArray();
+
+        // 查找 AC 策略
+        var acMatch = allProfiles.FirstOrDefault(p =>
+            !p.IsGlobalDefault &&
+            (p.PowerSourceMode == PowerSourceMode.Ac || p.PowerSourceMode == PowerSourceMode.Any) &&
+            ((p.Match?.ProcessNames?.Any(n => string.Equals(n, appName, StringComparison.OrdinalIgnoreCase)) == true) ||
+             (p.Match?.ExecutableNames?.Any(n => string.Equals(n, exeName, StringComparison.OrdinalIgnoreCase)) == true)));
+
+        if (acMatch is not null)
+        {
+            if (acMatch.IsEnabled)
+            {
+                CurrentAppAcProfileName = acMatch.Name;
+                CurrentAppAcStatusText = "已配置专属";
+                CurrentAppAcStatusBackground = "#FFE8F7EE";
+                CurrentAppAcStatusForeground = "#FF17823F";
+            }
+            else
+            {
+                CurrentAppAcProfileName = $"{acMatch.Name} (已禁用)";
+                CurrentAppAcStatusText = "已禁用";
+                CurrentAppAcStatusBackground = "#FFF5F7FA";
+                CurrentAppAcStatusForeground = "#FF8896A6";
+            }
+            IsCurrentAppAcConfigured = true;
+        }
+        else
+        {
+            var globalAc = allProfiles.FirstOrDefault(p => p.IsGlobalDefault && p.PowerSourceMode == PowerSourceMode.Ac);
+            CurrentAppAcProfileName = globalAc is not null ? $"跟随全局：{globalAc.Name}" : "跟随全局默认 (未配置专属)";
+            CurrentAppAcStatusText = "跟随全局";
+            CurrentAppAcStatusBackground = "#FFEAF2FF";
+            CurrentAppAcStatusForeground = "#FF0066CC";
+            IsCurrentAppAcConfigured = false;
+        }
+
+        // 查找 DC 策略
+        var dcMatch = allProfiles.FirstOrDefault(p =>
+            !p.IsGlobalDefault &&
+            (p.PowerSourceMode == PowerSourceMode.Battery || p.PowerSourceMode == PowerSourceMode.Any) &&
+            ((p.Match?.ProcessNames?.Any(n => string.Equals(n, appName, StringComparison.OrdinalIgnoreCase)) == true) ||
+             (p.Match?.ExecutableNames?.Any(n => string.Equals(n, exeName, StringComparison.OrdinalIgnoreCase)) == true)));
+
+        if (dcMatch is not null)
+        {
+            if (dcMatch.IsEnabled)
+            {
+                CurrentAppDcProfileName = dcMatch.Name;
+                CurrentAppDcStatusText = "已配置专属";
+                CurrentAppDcStatusBackground = "#FFE8F7EE";
+                CurrentAppDcStatusForeground = "#FF17823F";
+            }
+            else
+            {
+                CurrentAppDcProfileName = $"{dcMatch.Name} (已禁用)";
+                CurrentAppDcStatusText = "已禁用";
+                CurrentAppDcStatusBackground = "#FFF5F7FA";
+                CurrentAppDcStatusForeground = "#FF8896A6";
+            }
+            IsCurrentAppDcConfigured = true;
+        }
+        else
+        {
+            var globalDc = allProfiles.FirstOrDefault(p => p.IsGlobalDefault && p.PowerSourceMode == PowerSourceMode.Battery);
+            CurrentAppDcProfileName = globalDc is not null ? $"跟随全局：{globalDc.Name}" : "跟随全局默认 (未配置专属)";
+            CurrentAppDcStatusText = "跟随全局";
+            CurrentAppDcStatusBackground = "#FFEAF2FF";
+            CurrentAppDcStatusForeground = "#FF0066CC";
+            IsCurrentAppDcConfigured = false;
         }
     }
 }

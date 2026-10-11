@@ -51,7 +51,17 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
 
-                    <Button Grid.Row="3" Margin="0,12,0,0" Padding="14,8" Content="新建策略包" Command="{Binding CreateDeviceStrategyPackageCommand}" />
+                    <StackPanel Grid.Row="3" Margin="0,12,0,0">
+                        <Button Padding="14,8" Content="从当前配置创建策略包" Command="{Binding CreateDeviceStrategyPackageCommand}" />
+                        <Grid Margin="0,6,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Button Grid.Column="0" Margin="0,0,4,0" Padding="8,6" FontSize="11" Content="新建空白包" Command="{Binding CreateBlankDeviceStrategyPackageCommand}" />
+                            <Button Grid.Column="1" Margin="4,0,0,0" Padding="8,6" FontSize="11" Content="复制现有包" Command="{Binding DuplicateSelectedDeviceStrategyPackageCommand}" />
+                        </Grid>
+                    </StackPanel>
                 </Grid>
             </Border>
 
