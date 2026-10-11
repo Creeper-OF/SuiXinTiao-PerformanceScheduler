@@ -1,0 +1,104 @@
+[
+  {
+    "schemaVersion": 1,
+    "entryId": "official-ac-game-balanced",
+    "name": "Official AC Gaming Balance",
+    "author": "Performance Scheduler Team",
+    "summary": "An official plugged-in preset that keeps the foreground game responsive while gently suppressing browsers and launchers.",
+    "source": "Official",
+    "downloads": 1240,
+    "updatedAt": "2026-04-12T08:00:00+00:00",
+    "profile": {
+      "schemaVersion": 1,
+      "id": "community-official-ac-game-balanced",
+      "name": "Community Official AC Game Balanced",
+      "version": 1,
+      "isEnabled": true,
+      "powerSourceMode": "Ac",
+      "targetClassification": "Game",
+      "match": {
+        "executableNames": [],
+        "processNames": [],
+        "windowTitleContains": [],
+        "classifications": [
+          "Game"
+        ]
+      },
+      "powerPlan": {
+        "schemeGuid": "381b4222-f694-41f0-9685-ff5bb260df2e",
+        "preferredPlanName": "Balanced",
+        "restoreOnExit": true
+      },
+      "priority": {
+        "foregroundPriority": "High"
+      },
+      "gpu": {
+        "mode": "DriverDefault",
+        "allowVendorApi": false
+      },
+      "backgroundPolicies": [
+        {
+          "category": "browser",
+          "targetPriority": "BelowNormal",
+          "preferEfficiencyMode": false,
+          "notes": "Browsers yield while the game is active."
+        },
+        {
+          "category": "launcher",
+          "targetPriority": "BelowNormal",
+          "preferEfficiencyMode": false,
+          "notes": "Launchers should not compete with the foreground game."
+        }
+      ],
+      "notes": "Seeded from the bundled community catalog."
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "entryId": "community-battery-browser-cool",
+    "name": "Battery Browser Cool Mode",
+    "author": "CyuCloud Community",
+    "summary": "A battery-first browser preset designed for lower heat and longer sessions on older laptops.",
+    "source": "Community",
+    "downloads": 482,
+    "updatedAt": "2026-04-10T12:30:00+00:00",
+    "profile": {
+      "schemaVersion": 1,
+      "id": "community-battery-browser-cool",
+      "name": "Community Battery Browser Cool",
+      "version": 1,
+      "isEnabled": true,
+      "powerSourceMode": "Battery",
+      "targetClassification": "Browser",
+      "match": {
+        "executableNames": [],
+        "processNames": [],
+        "windowTitleContains": [],
+        "classifications": [
+          "Browser"
+        ]
+      },
+      "powerPlan": {
+        "schemeGuid": null,
+        "preferredPlanName": "",
+        "restoreOnExit": true
+      },
+      "priority": {
+        "foregroundPriority": "Normal"
+      },
+      "gpu": {
+        "mode": "PreferLowerPower",
+        "allowVendorApi": false
+      },
+      "backgroundPolicies": [
+        {
+          "category": "media",
+          "targetPriority": "BelowNormal",
+          "preferEfficiencyMode": true,
+          "notes": "Media apps should keep running but leave room for the browser."
+        }
+      ],
+      "notes": "Community seeded example with battery-aware defaults."
+    }
+  }
+]

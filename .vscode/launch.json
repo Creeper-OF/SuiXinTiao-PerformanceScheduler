@@ -6,10 +6,23 @@
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "build",
-      "program": "${workspaceFolder}/src/PerformanceScheduler.App/bin/Debug/net10.0-windows/PerformanceScheduler.App.exe",
-      "cwd": "${workspaceFolder}/src/PerformanceScheduler.App",
+      "program": "${workspaceFolder}/客户端/src/PerformanceScheduler.App/bin/Debug/net10.0-windows/PerformanceScheduler.App.exe",
+      "cwd": "${workspaceFolder}/客户端/src/PerformanceScheduler.App",
       "stopAtEntry": false,
       "console": "internalConsole"
+    },
+    {
+      "name": ".NET Launch SuiXinTiao Community API",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-community-api",
+      "program": "${workspaceFolder}/服务端/src/SuiXinTiao.Community.Api/bin/Debug/net10.0/SuiXinTiao.Community.Api.dll",
+      "cwd": "${workspaceFolder}/服务端/src/SuiXinTiao.Community.Api",
+      "stopAtEntry": false,
+      "console": "internalConsole",
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
     }
   ]
 }

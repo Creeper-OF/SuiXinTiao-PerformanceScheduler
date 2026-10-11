@@ -13,18 +13,24 @@
 ## 当前架构
 
 ```text
-PerformanceScheduler.App
+客户端/src/PerformanceScheduler.App
   WPF shell, views, view models, localization, settings, import/export workflow.
 
-PerformanceScheduler.Core
+客户端/src/PerformanceScheduler.Core
   Domain models, scheduler abstractions, profile matching, orchestration services.
 
-PerformanceScheduler.Infrastructure
+客户端/src/PerformanceScheduler.Infrastructure
   Win32 foreground detection, powercfg integration, process priority changes,
   persistence, diagnostics, rollback, startup recovery.
 
-tests/PerformanceScheduler.Tests
+客户端/tests/PerformanceScheduler.Tests
   Unit tests for matching, safety recovery, persistence, catalogs, and profile tooling.
+
+服务端/SuiXinTiao.Community.Api
+  ASP.NET Core Minimal API for the versioned, read-only community catalog.
+
+服务端/tests/SuiXinTiao.Community.Api.Tests
+  Catalog loading, filtering, missing-data and malformed-root regression tests.
 ```
 
 这套分层方向是正确的。后续重构的核心不是推倒重来，而是把危险动作收束到可审计的管线中，把 UI 中过重的状态管理逐步拆出去。
@@ -32,11 +38,11 @@ tests/PerformanceScheduler.Tests
 新增硬件能力采用渐进式 feature-first 目录，不再继续堆进平铺的 `Models`、`Abstractions` 或 `Gpu` 目录：
 
 ```text
-PerformanceScheduler.Core/Hardware/Gpu
+客户端/src/PerformanceScheduler.Core/Hardware/Gpu
   Abstractions/       厂商无关的能力检测和 Provider 契约
   Models/             GPU 偏好、能力快照和细粒度功能枚举
 
-PerformanceScheduler.Infrastructure/Hardware/Gpu
+客户端/src/PerformanceScheduler.Infrastructure/Hardware/Gpu
   Detection/          只负责识别适配器和厂商
   Composition/        只负责选择 Provider
   Providers/          AMD / NVIDIA / Intel / Unsupported 实现
@@ -62,13 +68,13 @@ PerformanceScheduler.Infrastructure/Hardware/Gpu
 | 危险动作未统一建模 | 部分缓解 | 引入动作级计划、结果、失败原因和恢复说明 |
 | 用户手动修改系统设置 | 已建立基座 | 已对账电源、进程和 Efficiency Mode；新增动作必须沿用 original / applied / current |
 | 快速前台切换 | 已建立基座 | 使用稳定调度事务 ID、串行门和会话去重避免状态覆盖 |
-| UI ViewModel 过重 | 未处理 | 拆出 monitoring、profiles、appearance、diagnostics 子服务 |
+| UI ViewModel 过重 | 部分缓解 | 遥测分析已移入 Core；继续拆出 monitoring、profiles、appearance、diagnostics 子服务 |
 | Profile 风险校验不足 | 已建立基座 | 保存、JSON 导入、迁移包、社区 Profile 和机型策略包共用 Core 安全规则 |
 | 社区策略可信度 | 部分缓解 | 已接入本地风险扫描与确认；仍需来源签名、信誉和兼容性证明 |
-| GPU 扩展风险 | 未处理 | 仅做 device-gated provider，不默认启用危险能力 |
+| GPU 扩展风险 | 锁频封装与恢复意图已接入 | NVML 锁频/复位、供电轮询和恢复失败保护已具备；完整设备基线、对账、并发所有权及实机验收待补齐 |
 | 遥测开销与工具冲突 | 部分缓解 | 手动 PresentMon 观察已有独立预算、唯一会话名、已知采集器冲突检测和取消清理；持续采样仍需实机开销基线 |
-| 闭环调节振荡 | 未处理 | 加安全包络、滞回、冷却时间、变化速率限制和观察模式 |
-| 多应用资源争用 | 未处理 | 引入受保护后台任务和资源仲裁，不按前台/后台一刀切 |
+| 闭环调节振荡 | 部分缓解 | 已加入最小稳定样本、观察窗口和滞回字段，并以只读控制器输出建议；冷却时间、变化速率和自动写入仍未开放 |
+| 多应用资源争用 | 基础已建立 | 已加入后台候选采集、保护分类、负载评估和 opt-in 动作门禁；GPU 逐进程指标与运行时自动注入仍未完成 |
 | 厂商接口碎片化 | 未处理 | 通过独立 provider 接入，按设备和驱动能力启用 |
 | 发布与升级可靠性 | 未处理 | 建立安装、升级、迁移、签名、崩溃诊断和自动化发布流程 |
 
@@ -89,13 +95,22 @@ PerformanceScheduler.Infrastructure/Hardware/Gpu
 - SQLite 使用关联子表原子保存动作类型、对象、原值、目标值、结果、稳定原因代码、技术消息和恢复说明。
 - 原始电源方案、高级电源参数或前台优先级无法读取时，阻止对应写入动作。
 - 稳定 `TransactionId` 已贯穿活动会话、回滚文件和 SQLite 运行审计；不同事务禁止合并。
-- 电源方案、高级电源参数、进程优先级和 Efficiency Mode 恢复前均执行 applied / current 对账。
+  - 电源方案、高级电源参数、进程优先级和 Efficiency Mode 恢复前均执行 applied / current 对账。
+  - 电源方案写入后增加目标方案复核，复核失败会进入动作失败和即时回滚路径。
+  - 高级电源参数写入后增加目标值复核，避免仅凭 `powercfg` 退出码报告“已应用”。
+  - 电源方案和高级参数回滚同样执行读回确认；Provider 返回成功但状态未恢复时保留回滚文件。
+- 后台策略按能力逐项降级：优先级能力不可用时仍可独立使用受支持的 Efficiency Mode，缺少回滚能力时全部进程写入动作保持阻止；Efficiency Mode 状态无法读取时按未知状态失败并触发回滚，不伪报成功。
+  - 受保护进程和调度器自身同时排除优先级与 Efficiency Mode 写入。
 - 同一事务保留首次原值并更新最后应用值，为后续自适应小步调节准备恢复语义。
-- 任一调度动作返回 `Failed` 时，本次运行不再标记成功，也不会缓存为活动会话。
+  - 任一调度动作返回 `Failed` 时，本次运行不再标记成功，也不会缓存为活动会话。
 - 失败运行会立即尝试回滚；完整恢复后允许下次检测重新尝试，未完整恢复时保留状态并阻止新的系统写入。
-- 同一应用、Profile 版本、配置签名和供电状态组成独立失败会话，连续失败按 5 / 10 / 20 / 40 / 60 秒退避，避免重复轰炸系统接口。
+  - 回滚状态存在但无法读取时不会被静默当成空状态；原文件保持保护，新的调度写入会被阻止并进入可见错误路径。
+  - 回滚状态在 JSON 解析后继续校验集合、PID/进程身份、枚举和处理器限制；结构异常会保留原文件并阻止 Provider 写入。
+  - 同一应用、Profile 版本、配置签名和供电状态组成独立失败会话，连续失败按 5 / 10 / 20 / 40 / 60 秒退避，避免重复轰炸系统接口。
 - 调度结果携带连续失败次数、下次重试时间和恢复状态；控制台与状态通知不再把失败运行显示为“已应用”。
-- 动作执行已从 `SchedulerOrchestrator` 抽离为可注入、可独立测试的 `ISchedulerActionExecutor`；调度器只保留识别、匹配、会话、失败恢复和结果持久化编排。
+  - 动作执行已从 `SchedulerOrchestrator` 抽离为可注入、可独立测试的 `ISchedulerActionExecutor`；调度器只保留识别、匹配、会话、失败恢复和结果持久化编排。
+  - 动作完成后的指标采集取消也会进入独立令牌回滚路径，活动会话只在结果采集安全完成后登记。
+  - 新会话先写入运行审计、成功后才登记为活动会话；SQLite 记录失败时立即回滚已应用动作并暂停自动调度。
 - 执行器统一负责捕获回滚基线、调用电源与进程 Provider，并返回动作级执行结果；测试锁定“先持久化基线、后修改系统”的顺序。
 - 执行器已继续拆分为 Power / Process handler；统一执行器只保留两阶段准备、回滚快照和动作汇总。
 - 诊断中心已展示最近一次调度的动作类型、状态、目标、原值/目标值和恢复状态，原始 Provider 信息保留为技术提示。
@@ -108,6 +123,7 @@ PerformanceScheduler.Infrastructure/Hardware/Gpu
 
 - 任意危险动作都能回答：为什么执行、执行了什么、原值是什么、目标值是什么、如何恢复。
 - 崩溃后启动能自动发现未完成回滚状态。
+- 启动会话元数据不可读时强制暂停自动调度，并在可行时继续检查和恢复回滚状态。
 - 部分回滚失败不会丢失剩余恢复信息。
 
 ### Phase 2: Explainability and Diagnostics
@@ -147,14 +163,16 @@ PerformanceScheduler.Infrastructure/Hardware/Gpu
 - Profile 保存、JSON 导入、迁移包、社区 Profile 和机型策略包使用同一套 Core 安全验证器。
 - 保存前阻止结构错误、非法范围、重复 ID、多个已启用全局默认 Profile 和 `RealTime` 优先级。
 - GPU 电压、厂商 API 和退出后不恢复电源修改会被标记为高风险警告。
-- 手动保存和社区导入必须确认高风险警告；不受信任的文件导入后默认禁用，需用户复核后再启用。
+- Profile 校验结果现在提供安全、需注意、高风险、阻止四级风险级别；匹配 Windows 受保护进程会提前给出高风险提示，执行层继续强制拦截。
+- 手动保存和社区导入必须确认高风险警告；未知来源文件导入会被标记为高风险并默认禁用，需用户复核后再启用。
 - `RealTime` 已从普通编辑器选项移除，并在持久化边界再次阻止，避免绕过 UI。
 - 整批导入在写盘前完成预检，任一配置失败都不会造成部分导入。
 - 损坏 Profile 或机型策略包会被隔离并记录加载问题，不阻断其他有效配置。
+- 动作执行器异常或取消发生在部分写入之后时，会进入独立令牌的即时回滚路径；回滚未完成则保持失败状态并阻止继续应用。
 
 下一步：
 
-- 增加关键进程、系统路径和未知来源策略的显式风险级别。
+- 继续补充系统路径策略的显式风险级别，并把设备能力、驱动版本和策略来源签名纳入社区导入判断。
 - 把设备能力、驱动版本和策略来源签名纳入社区导入判断。
 
 验收标准：
@@ -171,8 +189,16 @@ PerformanceScheduler.Infrastructure/Hardware/Gpu
 
 - 拆分过大的 `MainWindowViewModel`。
 - 把监控循环、状态中心、Profile 编辑、社区目录、外观设置拆成独立协调器或子 ViewModel。
+- UI 减负作为后续设计项：先梳理高频硬件任务、恢复入口和配置兼容，再决定外观选项及导航的简化方式。
+- 仪表盘、场景策略与应用联动可作为导航候选；当前仍是五个 Tab，不把三屏规划写成已完成改版。动画节奏须按实际交互验证，不预设统一 200ms 为规范要求。
 - Core 只保留业务规则和调度编排。
 - Infrastructure 只负责平台实现和持久化。
+
+已补充：
+
+- 新增 Core 层 `TelemetryAnalysisEvaluator` 和 `TelemetryAnalysisSummary`，统一编排资源压力、前台争用、历史对比、趋势和调度前后观察；ViewModel 只负责选择运行记录、格式化本地化文字和刷新集合。
+- 历史对比按观察时间选择最新的同应用样本，不再依赖 SQLite 返回顺序。
+- 当前观察的对比和趋势会排除未来时间戳样本，避免时钟回拨或异常历史数据改变诊断结论。
 
 验收标准：
 
@@ -186,7 +212,7 @@ PerformanceScheduler.Infrastructure/Hardware/Gpu
 已完成：
 
 - 新增独立 `Core/Telemetry` 模块，统一定义指标、Provider 能力、采集状态、稳定原因代码、样本与观察结果。
-- 遥测协调器强制最短采样间隔、单 Provider 超时、整轮观察预算和 Provider ID 唯一性；异常只降级为采集状态，不进入调度写入链路。
+- 遥测协调器强制最短采样间隔、单 Provider 硬超时、整轮观察预算和 Provider ID 唯一性；即使 Provider 不响应取消也会及时降级，异常只进入采集状态，不进入调度写入链路。
 - 首个 `windows.process` Provider 以低开销方式提供进程 CPU、工作集、专用内存、线程数和句柄数，并明确区分首轮 CPU 预热。
 - 诊断中心提供手动“观察当前前台”入口；该路径只执行前台识别、进程检查和遥测采集，不匹配或应用 Profile。
 - 新增独立 `ITelemetryHistoryStore` 与 SQLite 实现，按观察、Provider 样本、指标三级关系原子写入，不保存窗口标题、路径或窗口句柄。
@@ -197,14 +223,25 @@ PerformanceScheduler.Infrastructure/Hardware/Gpu
 - 设置页支持选择、校验和清除 PresentMon 控制台路径；修改后立即失效旧能力缓存，且本机路径不会进入迁移包。
 - 新增 `windows.gpu-process` Provider，通过 Windows GPU Engine 与 GPU Process Memory 计数器按 PID 读取最忙引擎利用率和进程显存摘要；缺少计数器或目标无 GPU 实例时独立降级。
 - 新增 `windows.system-hardware` Provider，通过标准处理器信息和热区性能计数器读取系统 CPU 实际频率与热区温度；两个计数器组独立检测，当前不提供伪造的 CPU/GPU 核心温度、板级功耗或风扇数据。
+- 新增可选 `nvidia.nvml` Provider，在 NVIDIA 驱动提供 `nvml.dll` 时只读读取 GPU 使用率、温度、功耗和图形频率；不携带厂商二进制，不调用显卡写入接口。
+- 新增独立资源压力评估器，根据有效的整机 CPU/GPU 使用率给出低、中、高或未知摘要；该摘要只用于诊断显示，不进入调度写入链路。
+- 新增前台/整机负载对照和资源建议评估器，区分前台主导负载与可能的后台争用；建议只用于诊断说明，不自动限制后台或改变硬件状态。
+- 遥测历史条目同时保留资源压力、前台/整机争用级别和保守资源建议，历史记录可以解释当时是否存在后台负载证据。
+- 新增同一前台进程的遥测对比摘要，从已有历史指标计算当前值与上次观察的差值；不混合不同应用，不让 UI 直接依赖 SQLite。
+- 新增同一前台进程的基础趋势摘要，按 Provider 和指标类型计算样本数、均值、范围与方向；趋势只用于诊断显示，不参与调度写入。
+- 新增最近一次成功调度的前后遥测对比，按运行时间寻找同应用样本；缺少前后样本或同源指标时明确降级，不把时间相关性当作因果证明。
+- 遥测分析统一只消费状态为 `Collected` 的 Provider 样本，失败、不可用、限流、预热和超时结果不会污染压力、争用、趋势或前后对比。
 - 遥测状态、指标和失败原因已纳入中英文完整性测试。
+- 诊断中心展示遥测 Provider 能力矩阵；能力结果按 Provider 缓存，语言切换只重绘本地化文本，用户手动重新检测时才显式失效调度与遥测能力缓存。
+- 新增[硬件兼容性验证矩阵](hardware-validation-matrix.md)，统一记录 CPU、GPU、供电、生命周期和传感器缺失场景；实机未执行前不宣称硬件组合已完整支持。
+- 新增多应用候选只读采集和[仲裁边界文档](resource-arbitration.md)；候选 CPU 使用率按 PID 启动时间校验，首轮没有基线时保持未知。
 
 下一步：
 
 - 使用官方二进制完成多显卡、多显示器、HAGS、UWP 与不同图形 API 的实机兼容性矩阵，并评估持续采样方案。
 - 建立厂商/设备受限的硬件遥测 Provider，按能力补充更准确的 CPU / GPU 温度、板卡功耗和风扇信息。
 - 扩展 OSD 和硬件监控工具冲突矩阵，区分“工具正在运行”和“工具正在占用采集会话”。
-- 在现有历史存储上增加调度前后对比和基础趋势图，不让图表层直接依赖 SQLite。
+- 验证趋势卡片在真实 PresentMon、多显卡和持续采样场景下的降级表现；图表层继续只消费分析结果，不直接依赖 SQLite。
 
 验收标准：
 
@@ -217,11 +254,13 @@ PerformanceScheduler.Infrastructure/Hardware/Gpu
 
 目标：把“调参数”升级为“选择目标体验”，形成可验证、可停止、可回滚的闭环调度。
 
-计划：
+基础已建立，当前仍是观察/建议模式：
 
 - 增加目标帧率、帧时间稳定性、温度上限、功耗上限、噪音偏好和性能/省电权重。
-- 由控制器根据实时反馈生成小步调整计划，而不是一次写入激进参数。
-- 加入滞回区间、冷却时间、变化速率限制和最低观察窗口，避免频繁振荡。
+- Profile 编辑器已保存上述目标字段；只读评估器会标记目标状态和不可用指标。
+- 控制器已根据观察窗口、最小稳定样本数和滞回结果判断“等待证据 / 达到目标 / 需要更多性能 / 需要降温或降低功耗”。
+- 稳定状态可以生成解释性建议，但不会生成可执行的系统写入动作。
+- 滞回和最低观察窗口已落地；冷却时间、变化速率限制、安全包络和实际小步调整仍待实现。
 - 增加观察模式：只记录建议动作，不修改系统，用于验证规则和设备兼容性。
 - 每个自适应动作继续经过动作计划、安全校验、能力检测和回滚管线。
 - 当传感器失效、目标不可达或连续恶化时，停止闭环并恢复静态安全配置。
@@ -237,9 +276,11 @@ PerformanceScheduler.Infrastructure/Hardware/Gpu
 
 目标：在前台应用、受保护后台任务和高负载后台程序之间合理分配资源。
 
-计划：
+基础已建立，当前仍是只读诊断和显式门禁：
 
 - 区分游戏、录制、语音、下载、编译、渲染、系统服务和未知程序等任务类型。
+- 已按进程启动时间保护 PID 复用，并对受保护进程、系统进程和无效指标保持保守降级。
+- 已实现候选负载评估和推荐名单；动作门禁在仲裁摘要缺失或证据不足时阻止后台写入。
 - 允许 Profile 声明受保护后台进程、最低资源需求和可限制对象。
 - 当前台帧时间恶化且确认存在资源争用时，再逐级限制后台任务。
 - 支持多个受保护应用和多开场景，定义规则优先级、冲突合并和总资源预算。
@@ -252,6 +293,8 @@ PerformanceScheduler.Infrastructure/Hardware/Gpu
 - 多条规则冲突时能给出确定、可解释的合并结果。
 - 后台限制解除后，所有被修改状态都能准确恢复。
 - 多开应用不会简单覆盖彼此的策略状态。
+
+下一步需要先把候选采集结果与运行时调度事务显式连接，再进行真实多开、录制和编译场景验证；当前默认路径不会自动启用仲裁。
 
 ### Phase 8: Extension Platform
 
@@ -266,7 +309,9 @@ PerformanceScheduler.Infrastructure/Hardware/Gpu
 - 频率、功耗、风扇或电压能力必须逐项检测，不以绕过 BIOS 或驱动限制为目标。
 - 导入导出迁移包时保留安全元数据。
 - Windows 通用能力优先接入 CPU Sets、内存优先级、Job Object 配额和更多公开电源参数。
-- 厂商 GPU Provider 按“只读遥测 -> 可恢复的功耗/频率限制 -> 高风险能力”逐级开放。
+- GPU 遥测保持只读；NVIDIA 官方锁频/复位、供电门控及独立恢复标记已接入。供电补偿、GPU 自检完整操作对与应用恢复已统一协调，模拟与真实 GPU 已隔离；后续补齐稳定设备身份、原状态/写后对账、第三方所有权和实机证据，再扩展 Profile GPU 动作与功耗限制，见 [NVML 专题](nvidia-nvml-telemetry.md)。
+- 防御性限制须验证频率上下限、设备身份、权限、状态读取、写后确认和恢复所有权；基线、动作与恢复均接入调度事务，实机验证通过后才开放。
+- Power Emergency Gate 已通过默认 150ms 轮询接入，覆盖初始电池、失败重试及异常后继续监测；与自检和恢复串行协调。电源事件订阅尚未实现，后续验证事件接入及真实响应时延、设备效果；不承诺固定频率、固定功耗或消除硬件断电。
 - AMD 以 ADLX、NVIDIA 以 NVML、Intel 以 Level Zero Sysman 作为首选公开接口；不可用时明确降级，不通过注入或逆向绕过驱动限制。
 - 电压偏移和电压曲线默认关闭，不允许随开机自动应用；只有能力检测、基线读取、写后验证和恢复链路全部成立时才允许用户显式启用。
 
@@ -284,10 +329,17 @@ PerformanceScheduler.Infrastructure/Hardware/Gpu
 
 - 为社区资源增加作者、签名、来源、设备匹配度、驱动/BIOS 范围和风险等级。
 - 记录复现成功率、回滚率、异常报告和调度前后基准结果。
-- 导入前展示兼容性差异、冲突项和将要执行的动作，并允许选择性导入。
-- 完善托盘运行、通知、诊断包导出、安装包、便携模式和卸载清理。
+  - 导入前展示兼容性差异、冲突项和将要执行的动作，并允许选择性导入。
+  - 迁移包读入阶段统一处理空集合并拒绝重复设备策略包 ID，避免导入过程静默覆盖或因空数据中断。
+  - Profile、设备策略包和设置导入前建立文件快照；任一阶段失败或取消时按逆序恢复全部参与存储，避免留下部分导入状态。
+  - 单独保存 Profile 或设备策略包也使用文件快照，更新失败时恢复当前文件与 Profile 历史。
+  - 配置快照恢复不完整时，应用层进入独立配置恢复安全闸门，暂停自动调度并先恢复当前系统会话，避免继续套用半成品配置。
+  - 设置页确认配置恢复前会从磁盘重新读取设置、Profile 和机型策略包，并再次执行 Profile 库结构安全校验；重复 ID 或多个全局默认配置仍存在时不能解除闸门。
+  - 启动会话、失败计数和回滚状态遇到损坏、同名目录或回滚后仍有残留时，统一按未知安全状态暂停调度，不静默重置历史。
+  - 启动会话状态读取失败时不会覆盖原文件写入新会话标记，确保损坏线索持续可见并可在后续启动继续保护。
+  - 完善托盘运行、通知、诊断包导出、安装包、便携模式和卸载清理。
 - 建立配置迁移、自动更新、代码签名与发布回退流程。
-- 使用 GitHub Actions 自动执行构建、测试、格式检查和发布产物校验。
+- 已建立 GitHub Actions 的 Windows 构建与测试流水线；格式检查、发布产物校验和签名仍待补齐。
 
 验收标准：
 
@@ -302,11 +354,14 @@ Phase 2 已完成。动作级解释模型、SQLite 历史读取、稳定事务 I
 
 当前诊断 UI 已能选择最近 50 次运行，查看运行级失败退避、动作原因、处理建议、用户事件和 Provider 技术消息，并能导出独立容错的脱敏 ZIP。只读进程遥测、预算控制、SQLite 历史与最近观察摘要也已形成可扩展基座。
 
+当前运行时还已接入机型策略包解析层：仅接受同硬件或同机型且匹配当前 AC/电池状态的策略包；同硬件优先，包内角色可转换为全局、接电或电池语义，本地同 ID Profile 保持权威，解析失败自动回退到本地 Profile 库。
+
 建议按这个顺序实现：
 
-1. 在真实 PresentMon 控制台上完成权限、取消、超时和不同图形 API 的兼容性验证，并增加二进制版本/完整性信息展示。
-2. 在现有 Windows GPU 进程计数器基础上建立硬件 Provider 能力矩阵，已接入标准 CPU 频率和系统热区温度来源；继续评估不需要管理员权限的功耗、风扇和更准确的芯片温度来源。
-3. 基于现有历史接口设计调度前后对比模型，再实现趋势图，不让 UI 反向约束采集层。
+1. 按硬件验证矩阵执行真实 PresentMon、多显卡、多显示器、HAGS、供电切换和生命周期场景，并保留证据。
+2. 将仲裁候选、系统争用摘要和 Profile 的 opt-in 开关接入同一个调度事务，先保持建议模式，再验证单项后台限制的回滚。
+3. 在控制器已有稳定样本和滞回基础上补充冷却时间、变化速率、安全包络和可停止的自适应动作。
+4. 优先完善已接入的 GPU 锁频/复位恢复链路；GPU 遥测仍只读，完整基线、写后验证、所有权与实机矩阵完成后，再开放更多可恢复 GPU 动作。
 
 总体依赖顺序固定为：
 

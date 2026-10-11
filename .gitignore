@@ -507,3 +507,8 @@ release/
 # Optional third-party PresentMon binaries are installed locally, not vendored.
 tools/PresentMon/*.exe
 tools/PresentMon/*.dll
+
+# Community API runtime data is local deployment state, not catalog source.
+服务端/data/inbox/
+服务端/data/runtime/
+服务端/data/uploads/

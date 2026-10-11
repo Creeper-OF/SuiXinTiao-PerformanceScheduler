@@ -1,0 +1,179 @@
+<UserControl x:Class="PerformanceScheduler.App.Views.PowerPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
+             xmlns:ui="clr-namespace:PerformanceScheduler.App.Ui"
+             xmlns:viewModels="clr-namespace:PerformanceScheduler.App.ViewModels">
+    <Grid Margin="20"
+          ui:StaggeredRevealBehavior.IsEnabled="{Binding UiStaggeredRevealEnabled}"
+          ui:StaggeredRevealBehavior.DurationMilliseconds="{Binding UiMotionDurationMilliseconds}">
+        <TabControl Style="{StaticResource SegmentedTabControlStyle}">
+            <!-- 分段 1: 系统电源计划与能耗 -->
+            <TabItem Header="{Binding Strings[Segment.PowerSchemes]}">
+                <Grid Margin="0,4,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- 顶部两列：当前激活方案与处理器状态 -->
+                    <Grid Grid.Row="0" Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1.2*" />
+                            <ColumnDefinition Width="1.1*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- 卡片 1: 当前激活电源计划 -->
+                        <Border Grid.Column="0" Margin="0,0,14,0" Padding="18" Style="{StaticResource CardStyle}">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <DockPanel>
+                                    <TextBlock DockPanel.Dock="Left" Style="{StaticResource PageEyebrowStyle}" Foreground="#FF1F7A5C" Text="{Binding Strings[Section.PowerPlan]}" />
+                                    <Border DockPanel.Dock="Right" Padding="8,3" Background="#FFE7F8EC" CornerRadius="8">
+                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#FF149A48" Text="原生安全接管" />
+                                    </Border>
+                                </DockPanel>
+                                <StackPanel Grid.Row="1" Margin="0,10,0,0" VerticalAlignment="Center">
+                                    <TextBlock FontSize="20" FontWeight="Bold" TextTrimming="CharacterEllipsis" Foreground="{StaticResource TitleBrush}" Text="{Binding ActivePowerPlanName}" />
+                                    <TextBlock Margin="0,4,0,0" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource SidebarMutedBrush}" Text="随前台应用切换自动切换电源计划。退出或异常时自动回滚至初始状态。" />
+                                </StackPanel>
+                                <Border Grid.Row="2" Margin="0,10,0,0" Padding="10" Background="#FFF5FAF8" BorderBrush="#FFCCE8E0" BorderThickness="1" CornerRadius="10">
+                                    <TextBlock FontSize="11" Foreground="#FF1F6F5E" Text="✓ 支持 Windows 卓越性能、高性能、平衡及省电计划" />
+                                </Border>
+                            </Grid>
+                        </Border>
+
+                        <!-- 卡片 2: 处理器电源状态调节 (Processor Max State) -->
+                        <Border Grid.Column="1" Padding="18" Style="{StaticResource CardStyle}">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <TextBlock Style="{StaticResource PageEyebrowStyle}" Foreground="{StaticResource AccentBrush}" Text="处理器最大性能状态" />
+                                <StackPanel Grid.Row="1" Margin="0,10,0,0">
+                                    <TextBlock FontSize="12" Foreground="{StaticResource SidebarMutedBrush}" Text="调节 CPU 最大处理器状态百分比 (例如设为 99% 可禁用 CPU 自动睿频，有效压制发热并平稳功耗；设为 100% 全速释放)。" TextWrapping="Wrap" />
+                                    <Grid Margin="0,12,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="100" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="处理器最大状态 (%):" />
+                                            <TextBlock Margin="0,2,0,0" FontSize="10" Foreground="{StaticResource SidebarMutedBrush}" Text="留空表示继承当前系统电源计划默认值" />
+                                        </StackPanel>
+                                        <TextBox Grid.Column="1" Height="32" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" FontWeight="Bold" Text="{Binding ProfileDraft.ProcessorMaxStatePercentText, UpdateSourceTrigger=PropertyChanged}" />
+                                    </Grid>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </Grid>
+
+                    <!-- 下半部分：系统检测到的所有原生电源计划列表与切换选择 -->
+                    <Border Grid.Row="1" Padding="18" Style="{StaticResource CardStyle}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Left">
+                                    <TextBlock FontSize="14" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="可用系统电源计划" />
+                                    <TextBlock Margin="0,3,0,0" FontSize="11" Foreground="{StaticResource SidebarMutedBrush}" Text="选择调度策略生效时将应用的目标电源计划" />
+                                </StackPanel>
+                                <ComboBox DockPanel.Dock="Right" Width="260" Height="32" VerticalAlignment="Center" ItemsSource="{Binding PowerPlanOptions}" DisplayMemberPath="DisplayName" SelectedItem="{Binding ProfileDraft.SelectedPowerPlan, Mode=TwoWay}" />
+                            </DockPanel>
+                            <ListBox Grid.Row="1" Margin="0,14,0,0" ItemsSource="{Binding PowerPlanOptions}" SelectedItem="{Binding ProfileDraft.SelectedPowerPlan, Mode=TwoWay}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type viewModels:PowerPlanOptionViewModel}">
+                                        <Border Margin="0,0,0,8" Padding="12" Background="White" BorderBrush="#FFE5EDF5" BorderThickness="1" CornerRadius="12">
+                                            <DockPanel>
+                                                <TextBlock DockPanel.Dock="Left" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding DisplayName}" />
+                                                <TextBlock DockPanel.Dock="Right" FontSize="11" FontFamily="Consolas" Foreground="{StaticResource SidebarMutedBrush}" Text="{Binding SchemeGuid}" />
+                                            </DockPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- 分段 2: 供电状态与急停门控 -->
+            <TabItem Header="{Binding Strings[Segment.PowerEmergency]}">
+                <Grid Margin="0,4,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- 供电模式感知与门控配置 -->
+                    <Grid Grid.Row="0" Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1.1*" />
+                            <ColumnDefinition Width="1.2*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- 左侧：供电模式策略选择 -->
+                        <Border Grid.Column="0" Margin="0,0,14,0" Padding="18" Style="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource PageEyebrowStyle}" Foreground="#FF9B6A18" Text="供电模式门控 (AC / DC)" />
+                                <TextBlock Margin="0,8,0,0" FontSize="12" Foreground="{StaticResource SidebarMutedBrush}" Text="配置当前策略在何种供电状态下允许激活。当切换至电池模式时，激进调控将被阻止或自动降级。" TextWrapping="Wrap" />
+                                <Grid Margin="0,16,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="180" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="允许生效的供电状态:" />
+                                    <ComboBox Grid.Column="1" Height="32" VerticalAlignment="Center" ItemsSource="{Binding CommunityPowerFilterOptions}" DisplayMemberPath="DisplayName" SelectedValuePath="Value" SelectedValue="{Binding ProfileDraft.PowerSourceMode, Mode=TwoWay}" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 右侧：急停与电池安全保护机制 -->
+                        <Border Grid.Column="1" Padding="18" Style="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource PageEyebrowStyle}" Foreground="#FFD64045" Text="电源断电自愈急停" />
+                                <TextBlock Margin="0,8,0,0" FontSize="12" Foreground="{StaticResource SidebarMutedBrush}" Text="随芯调集成内核级电源广播监听器。一旦检测到交流电源拔出 (AC → DC)，系统立即触发安全门禁：" TextWrapping="Wrap" />
+                                <Border Margin="0,12,0,0" Padding="12" Background="#FFFFF5F6" BorderBrush="#FFFFD0D6" BorderThickness="1" CornerRadius="12">
+                                    <StackPanel>
+                                        <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#FFD64045" Text="• 自动重置 GPU 锁定频率，解除强制超频状态" />
+                                        <TextBlock Margin="0,4,0,0" FontSize="12" FontWeight="SemiBold" Foreground="#FFD64045" Text="• 自动恢复为系统原生平衡/节电电源计划" />
+                                        <TextBlock Margin="0,4,0,0" FontSize="12" FontWeight="SemiBold" Foreground="#FFD64045" Text="• 撤销后台 CPU Sets / Affinity 锁核限制" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <!-- 下方说明与一键回滚卡片 -->
+                    <Border Grid.Row="1" Padding="18" Style="{StaticResource CardStyle}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Style="{StaticResource PageEyebrowStyle}" Text="电源状态基线审计" />
+                            <Grid Grid.Row="1" Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock FontSize="14" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="电源方案原子事务保护已就绪" />
+                                    <TextBlock Margin="0,4,0,0" FontSize="11" Foreground="{StaticResource SidebarMutedBrush}" Text="每次调度应用前，系统均在磁盘与内存双重写入原方案 GUID 备份。发生非预期关闭时由自愈恢复管理器秒级复原。" />
+                                </StackPanel>
+                                <Button Grid.Column="1" Padding="14,8" Content="立即复原电源方案" Command="{Binding RestoreCommand}" Background="#FFFFFFFF" Foreground="{StaticResource AccentBrush}" BorderBrush="#FF9FC3FF" BorderThickness="1" />
+                            </Grid>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</UserControl>

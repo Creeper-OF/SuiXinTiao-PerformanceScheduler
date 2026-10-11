@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SuiXinTiao.Community.Api/SuiXinTiao.Community.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SuiXinTiao.Community.Api.Tests/SuiXinTiao.Community.Api.Tests.csproj" />
+  </Folder>
+</Solution>

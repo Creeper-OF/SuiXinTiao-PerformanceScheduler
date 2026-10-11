@@ -1,0 +1,118 @@
+<UserControl x:Class="PerformanceScheduler.App.Views.StrategyLibraryPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:PerformanceScheduler.App.Ui"
+             xmlns:viewModels="clr-namespace:PerformanceScheduler.App.ViewModels">
+    <Grid Margin="28,20,28,24"
+          ui:StaggeredRevealBehavior.IsEnabled="{Binding UiStaggeredRevealEnabled}"
+          ui:StaggeredRevealBehavior.DurationMilliseconds="{Binding UiMotionDurationMilliseconds}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- 页面标题与原型示意 -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,16">
+            <TextBlock FontSize="26" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding Strings[Nav.LibraryTitle]}" />
+            <TextBlock Margin="0,4,0,0" FontSize="12" Foreground="{StaticResource SidebarMutedBrush}" Text="配置工作区 · 策略包归档 · Profile 与应用规则组织" />
+        </StackPanel>
+
+        <!-- 双栏工作区 (原型 3.5) -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="280" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- 左栏: 配置工作区列表 -->
+            <Border Grid.Column="0" Margin="0,0,16,0" Padding="20" Background="#FFFFFFFF" BorderBrush="#FFE5EAF2" BorderThickness="1" CornerRadius="16">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" FontSize="17" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="配置工作区" />
+                    <TextBlock Grid.Row="1" Margin="0,4,0,14" FontSize="12" Foreground="{StaticResource SidebarMutedBrush}" Text="我的默认配置" />
+
+                    <ListBox Grid.Row="2" Background="Transparent" BorderThickness="0"
+                             ItemsSource="{Binding DeviceStrategyPackages}"
+                             SelectedItem="{Binding SelectedDeviceStrategyPackage, Mode=TwoWay}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate DataType="{x:Type viewModels:DeviceStrategyPackageListItemViewModel}">
+                                <Border Margin="0,0,0,8" Padding="12,10" Background="#FFF8FBFD" BorderBrush="#FFE5EDF5" BorderThickness="1" CornerRadius="10">
+                                    <StackPanel>
+                                        <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="{Binding Name}" />
+                                        <TextBlock Margin="0,3,0,0" FontSize="11" Foreground="{StaticResource SidebarMutedBrush}" Text="{Binding Summary}" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <Button Grid.Row="3" Margin="0,12,0,0" Padding="14,8" Content="新建策略包" Command="{Binding CreateDeviceStrategyPackageCommand}" />
+                </Grid>
+            </Border>
+
+            <!-- 右栏: 选中的策略包详情与包含方案 -->
+            <Border Grid.Column="1" Padding="24" Background="#FFFFFFFF" BorderBrush="#FFE5EAF2" BorderThickness="1" CornerRadius="16">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" FontSize="20" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding SelectedDeviceStrategyPackage.Name, TargetNullValue='游戏本优化包'}" />
+                    <TextBlock Grid.Row="1" Margin="0,4,0,16" FontSize="13" Foreground="{StaticResource SidebarMutedBrush}" Text="包含 3 个 Profile · 2 条应用规则 · 全局 AC/DC 默认" />
+
+                    <!-- 分段胶囊: Profile | 应用匹配 | 全局策略 -->
+                    <Border Grid.Row="2" Margin="0,0,0,16" HorizontalAlignment="Left" Padding="4" Background="#FFE8EEF5" BorderBrush="#FFDCE5F0" BorderThickness="1" CornerRadius="12">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Padding="16,6" Background="#FFFFFFFF" CornerRadius="10">
+                                <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="Profile" />
+                            </Border>
+                            <Border Margin="4,0,0,0" Padding="16,6" Background="Transparent" CornerRadius="10">
+                                <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource SidebarMutedBrush}" Text="应用匹配" />
+                            </Border>
+                            <Border Margin="4,0,0,0" Padding="16,6" Background="Transparent" CornerRadius="10">
+                                <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource SidebarMutedBrush}" Text="全局策略" />
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 包含的 Profile 方案列表 -->
+                    <ListBox Grid.Row="3" Background="Transparent" BorderThickness="0"
+                             ItemsSource="{Binding Profiles}"
+                             SelectedItem="{Binding SelectedProfile, Mode=TwoWay}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate DataType="{x:Type viewModels:ProfileListItemViewModel}">
+                                <Border Margin="0,0,0,10" Padding="16,14" Background="#FFF9FCFE" BorderBrush="#FFE5EDF5" BorderThickness="1" CornerRadius="12">
+                                    <DockPanel>
+                                        <StackPanel DockPanel.Dock="Left">
+                                            <TextBlock FontSize="15" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding Name}" />
+                                            <TextBlock Margin="0,4,0,0" FontSize="12" Foreground="{StaticResource SidebarMutedBrush}" Text="{Binding Summary}" />
+                                        </StackPanel>
+                                        <Button DockPanel.Dock="Right" Padding="12,6" FontSize="11" Background="#FFEAF2FF" Foreground="{StaticResource AccentBrush}" BorderThickness="0" Content="编辑" />
+                                    </DockPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <!-- 底部操作按钮: 导出策略包 -->
+                    <DockPanel Grid.Row="4" Margin="0,16,0,0">
+                        <Button DockPanel.Dock="Right" Padding="18,10" Content="导出策略包" Command="{Binding ExportProfilesCommand}" Background="#FFEAF2FF" Foreground="{StaticResource AccentBrush}" BorderThickness="0" />
+                        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Margin="0,0,10,0" Padding="14,8" Content="新建方案" Command="{Binding NewProfileCommand}" />
+                            <Button Padding="14,8" Content="导入方案" Command="{Binding ImportProfilesCommand}" Background="#FF315F72" />
+                        </StackPanel>
+                    </DockPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

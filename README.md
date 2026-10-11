@@ -10,10 +10,18 @@
 - [安全基座](docs/safety-baseline.md)：调度事务、回滚状态和进程优先级保护规则。
 - [公开仓库维护清单](docs/open-source-checklist.md)：公开提交前的隐私、构建产物和文档同步检查。
 - [文档索引](docs/README.md)：文档维护规则与入口。
+- [API 与模块契约](docs/api-contracts.md)：接口边界、默认行为、安全不变量和审查速读路径。
+- [目标体验控制](docs/target-experience.md)：目标帧率、温度、功耗、噪音偏好和当前控制边界。
+- [更新日志](CHANGELOG.md)：每次更新的功能、安全影响、验证结果和已知风险。
 - [功能结构](docs/功能结构.md)：当前桌面端的用户任务结构。
 - [PresentMon 可选集成](docs/presentmon-integration.md)：帧时间采集的安装方式、安全边界与已知限制。
 - [Windows GPU 进程遥测](docs/windows-gpu-telemetry.md)：目标进程 GPU 使用率和显存观察的语义与限制。
 - [Windows 系统硬件遥测](docs/windows-system-telemetry.md)：CPU 频率、系统热区温度和标准计数器的降级边界。
+- [NVIDIA NVML 只读遥测](docs/nvidia-nvml-telemetry.md)：NVIDIA 驱动自带 NVML 的 GPU 使用率、温度、功耗和图形频率观察边界。
+- [资源压力摘要](docs/resource-pressure-diagnostics.md)：整机 CPU/GPU 压力分级的阈值和只读边界。
+- [多应用资源仲裁边界](docs/resource-arbitration.md)：后台候选、稳定采样、保护分类和动作门禁。
+- [硬件兼容性验证矩阵](docs/hardware-validation-matrix.md)：真实设备覆盖范围、证据记录格式和安全验收标准。
+- [社区服务端](docs/community-server.md)：社区 API 的边界、目录接口和后续演进计划。
 
 ## 参与项目
 
@@ -40,16 +48,30 @@
 - 应用配置匹配：根据进程名、可执行文件名、窗口标题等规则匹配应用配置。
 - 自动调度开关：开启后会跟随前台应用变化自动应用对应策略。
 - 电源方案管理：通过 Windows `powercfg` 读取、切换和恢复电源方案。
+- 能力检测降级：`powercfg` 或硬件 Provider 不可用时，只将对应选项标记为设备不支持，不阻断其他只读检测；用户主动取消仍保留取消语义。
 - 进程优先级管理：对前台进程应用优先级策略，并保留恢复能力。
-- 安全保护：支持异常启动保护、一键回滚、退出恢复原电源方案等策略。
+- 安全保护：支持异常启动保护、一键回滚、退出恢复原电源方案；配置导入恢复不完整时会暂停自动调度并阻止绕过安全闸门。
+- 焦点丢失保护：前台窗口暂时消失或进程检查失败时，会先恢复活动调度会话；恢复失败会继续阻止新的调度。
+- 设置写入保护：设置绑定落盘失败时会恢复上一次有效值，并通过日志与状态中心提示，不会把半保存状态继续用于调度。
 - 配置管理：支持 JSON 格式的应用配置保存、编辑、版本回滚、导入导出。
-- 机型策略包结构：为后续“某个设备型号的一整套策略”做数据结构预留。
+- 单独 Profile 导入只接受合法的 JSON 对象或数组；标量、`null` 和空根节点会被拒绝，不会伪装成空导入成功。
+- 机型策略包运行时选择：自动调度会先按当前设备兼容性和 AC/电池状态筛选策略包；同硬件优先于同机型，本地 Profile 冲突时保持本地配置优先。
+- 机型策略包启用保护：社区导入的策略包默认停用，用户可在本地策略中心明确启用或停用，避免未经审阅的包直接进入自动调度。
 - 诊断中心：展示能力检测、设备指纹、显卡扩展准备状态、运行审计与分层日志；支持在不修改系统状态的前提下观察前台进程、保存基础遥测历史，并可导出默认脱敏的诊断包。
 - 可选帧时间观察：接入用户自行安装的官方 PresentMon 控制台，手动采集平均 FPS、平均帧时间、95% / 99% 帧时间和帧样本数；未安装或存在采集冲突时自动降级。
 - Windows GPU 进程观察：通过系统性能计数器读取目标进程的 GPU 使用率、独占显存和共享显存；显存值仅用于诊断参考，不参与自动调度决策。
-- Windows 系统硬件观察：通过标准性能计数器读取系统 CPU 实际频率和热区温度；热区温度仅作为诊断参考，不冒充 CPU/GPU 核心温度。
+- Windows 系统硬件观察：通过标准性能计数器读取整机 CPU 使用率、CPU 实际频率、热区温度、整机 GPU 最忙引擎利用率和显存摘要；热区温度与显存值仅作为诊断参考，不冒充 CPU/GPU 芯片级数据。
+- NVIDIA NVML 只读观察：在驱动提供 `nvml.dll` 时读取 NVIDIA GPU 使用率、温度、功耗和图形频率；不修改任何显卡设置。
+- 资源压力摘要：根据有效的整机 CPU/GPU 使用率显示低、中、高或未知；只用于诊断提示，不会自动修改配置。
+- 前台/整机负载对照：区分“前台应用本身占用资源”和“整机高负载但前台占比不高”的可能后台争用场景；只提供证据，不自动限制后台程序。
+- 资源建议：在证据充分时提示检查后台负载或说明前台应用主导负载，不会自动执行限制。
+- 目标体验基础：Profile 可保存目标 FPS、帧时间、温度、功耗、噪音偏好和控制模式；诊断会用观察窗口、稳定样本和滞回给出只读状态与建议，不会自动写入硬件参数。
+- 多应用仲裁基础：手动观察时采集后台候选的分类、保护状态和 CPU 使用率；首轮样本保持未知，证据不足时不会限制后台。
+- GPU 安全边界：公开能力检测、多适配器识别、NVIDIA NVML 只读遥测和可回滚限制 readiness 已拆分；当前所有 GPU 写入仍保持关闭。
+- 同应用遥测对比与基础趋势：按前台进程名、Provider 来源和指标类型比较历史变化，不混合不同软件或不同来源的数据，并显示均值、范围、方向以及最近成功调度前后的可用差值。
 - 外观自定义：支持窗口背景、侧边栏背景、主内容背景、主题颜色和卡片透明度。
 - 本地化：使用 JSON 语言包，内置简体中文与英文。
+- 社区服务端初版：提供版本化的只读健康检查、目录清单、应用 Profile 和机型策略包接口；社区内容仍由客户端负责校验和安全导入。
 
 ## 计划中的扩展
 
@@ -58,27 +80,31 @@
 - 显卡厂商扩展能力检测，以及在设备支持时启用频率/功耗相关选项。
 - 机型策略包与应用配置之间的组合、移出和重新打包。
 - 社区资源同步、下载、评分、复现成功率和设备匹配度。
-- 目标体验配置，例如目标帧率、温度上限、噪音偏好、优先省电或优先稳定。
-- PresentMon 持续采样、趋势对比，以及温度、功耗和 GPU 负载等能力受限遥测。
+- 目标体验的真实闭环调节，包括冷却时间、变化速率、安全包络和可停止的小步动作。
+- PresentMon 持续采样、趋势图表，以及温度、功耗和 GPU 负载等能力受限遥测；当前已支持只读的基础趋势文字摘要。
 - 带有滞回、冷却时间、安全包络和观察模式的自适应闭环调度。
-- 多应用资源仲裁，为录制、语音、编译等受保护后台任务保留必要资源。
+- 多应用资源仲裁的运行时注入、GPU 逐进程指标、最低资源预算和多开冲突合并。
 - 可隔离的 CPU、GPU 与 OEM Provider，不支持或不可恢复的能力不会默认启用。
 - 社区策略签名、兼容性扫描、本机验证结果和调度前后效果对比。
 
 ## 项目结构
 
 ```text
-PerformanceScheduler.sln
-PerformanceScheduler.slnx
-src/
-  PerformanceScheduler.App/             # WPF 桌面端、界面、视图模型、应用设置
-  PerformanceScheduler.Core/            # 核心模型、接口、匹配逻辑与调度编排
-  PerformanceScheduler.Infrastructure/  # Win32、powercfg、SQLite、文件日志等实现
-tests/
-  PerformanceScheduler.Tests/           # xUnit 单元测试
-profiles/                               # 内置示例应用配置
-community/                              # 社区目录和机型策略包示例数据
-locales/                                # 语言包
+客户端/
+  PerformanceScheduler.sln
+  PerformanceScheduler.slnx
+  src/
+    PerformanceScheduler.App/             # WPF 桌面端、界面、视图模型、应用设置
+    PerformanceScheduler.Core/            # 核心模型、接口、匹配逻辑与调度编排
+    PerformanceScheduler.Infrastructure/  # Win32、powercfg、SQLite、文件日志等实现
+  tests/
+    PerformanceScheduler.Tests/           # xUnit 单元测试
+  profiles/                               # 内置示例应用配置
+  community/                              # 客户端本地社区目录样例
+  locales/                                # 语言包
+服务端/
+  src/SuiXinTiao.Community.Api/           # ASP.NET Core 社区只读 API
+  data/                                   # 服务端开发样例目录
 docs/                                   # 设计文档
 ```
 
@@ -91,14 +117,20 @@ docs/                                   # 设计文档
 ## 启动方式
 
 ```powershell
-dotnet build PerformanceScheduler.sln
-dotnet run --project .\src\PerformanceScheduler.App\PerformanceScheduler.App.csproj
+dotnet build .\客户端\PerformanceScheduler.sln
+dotnet run --project .\客户端\src\PerformanceScheduler.App\PerformanceScheduler.App.csproj
 ```
 
 运行测试：
 
 ```powershell
-dotnet test .\tests\PerformanceScheduler.Tests\PerformanceScheduler.Tests.csproj
+dotnet test .\客户端\tests\PerformanceScheduler.Tests\PerformanceScheduler.Tests.csproj
+```
+
+启动社区 API：
+
+```powershell
+dotnet run --project .\服务端\src\SuiXinTiao.Community.Api\SuiXinTiao.Community.Api.csproj --launch-profile SuiXinTiao.Community.Api
 ```
 
 ## 开发提示
@@ -107,7 +139,13 @@ dotnet test .\tests\PerformanceScheduler.Tests\PerformanceScheduler.Tests.csproj
 
 ## 安全说明
 
-随芯调会调整电源方案和进程优先级，因此项目默认强调可回滚、可解释和可禁用。不支持的设备能力应该在界面中明确置灰或提示“设备不支持该选项”。显卡频率、电压、厂商私有接口等能力会在后续以扩展方式接入，不以绕过 BIOS、驱动或系统限制为目标。
+随芯调会调整电源方案、进程优先级和受限的后台效率提示，因此项目默认强调可回滚、可解释和可禁用。不支持的设备能力应该在界面中明确置灰或提示“设备不支持该选项”；如果同一 Profile 的其他动作仍然成功应用，控制台和运行历史会显示“部分应用”以及未支持动作数量。受保护的 Windows 关键进程和调度器自身不会接收优先级或 Efficiency Mode 写入。显卡频率、电压、厂商私有接口等能力会在后续以扩展方式接入，不以绕过 BIOS、驱动或系统限制为目标。
+
+单独 Profile、社区机型策略包和迁移包导入都会在写入前校验格式与安全规则，并为实际参与的存储保存文件快照。社区来源按不可信配置处理，导入后的 Profile 默认禁用，机型策略包条目也不会保留默认启用状态，需用户审阅后手动启用。任一阶段失败或取消时会按逆序恢复；如果恢复本身失败，程序会明确报告未完成的存储恢复，不会把部分导入伪装成成功。单个 Profile 或机型策略包保存同样具备文件快照边界，更新失败时恢复原文件和历史。快照和日常读取都会拒绝配置目录中的重解析点，并只处理经过校验的顶层 JSON；损坏或权限异常的配置文件不会被静默跳过，而会记录为加载问题并阻止恢复保护解除。Profile 历史在真正打开 revision 时还会再次校验完整路径，避免运行期间的路径重定向；原子写入会在创建临时文件前以及最终替换前再次校验目标路径和父级目录。UI 设置文件损坏或路径类型错误时只使用安全默认值，不会静默覆盖原文件，并会提示配置加载问题，直到用户成功保存新设置。配置恢复保护的人工确认还会重新执行 Profile 库结构校验，重复 Profile ID 或多个已启用全局默认 Profile 仍存在时不能解除保护。
+
+启动时即使缺少会话标记，只要仍有待回滚状态也会先恢复或暂停新的调度；用户关闭启动自动回滚时，待处理状态同样不会被绕过。调度动作完成后若启动保护状态无法保存，程序会暂停调度并独立尝试回滚，不能只停止监控；新会话只有在运行审计成功写入后才登记为活动会话，SQLite 记录失败时会回滚刚应用的动作并暂停自动调度。启动保护状态不可读或回滚未解决时，恢复按钮也不能绕过安全闸门。启动失败计数无法读取时，程序不会写入新的普通会话标记；正常退出也不会把原会话标记为干净，避免下次启动跳过保护检查。应用使用单实例互斥，避免多个进程同时操作同一份启动会话和回滚状态；文件日志或日志订阅异常只会降级诊断，不会反向阻断启动、调度或回滚。
+
+如果 Profile 连续触发异常退出阈值，但由于配置存储不可用而无法自动禁用，应用会强制暂停自动调度并锁定恢复入口，不能因为用户关闭了“异常后暂停调度”而继续应用该配置；待处理 Profile 身份会保留在启动保护状态中，后续启动会继续重试禁用。修复配置存储并完成保护状态确认后，才允许恢复调度。
 
 ## 许可证
 

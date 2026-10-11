@@ -4,11 +4,12 @@
 
 ## 可以公开提交
 
-- `src/` 源码。
-- `tests/` 测试。
-- `profiles/` 中经过脱敏的示例 Profile。
-- `community/` 中的示例目录和示例策略包。
-- `locales/` 语言包。
+- `客户端/src/` 源码。
+- `客户端/tests/` 测试。
+- `客户端/profiles/` 中经过脱敏的示例 Profile。
+- `客户端/community/` 中的示例目录和示例策略包。
+- `客户端/locales/` 语言包。
+- `服务端/src/` 社区 API 源码和 `服务端/tests/` 服务端测试。
 - `docs/` 文档。
 - 解决方案文件、README、LICENSE、NOTICE、贡献说明和安全说明。
 

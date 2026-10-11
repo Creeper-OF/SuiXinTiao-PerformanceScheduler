@@ -1,0 +1,37 @@
+name: build-and-test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: |
+          dotnet restore 客户端/PerformanceScheduler.slnx
+          dotnet restore 服务端/SuiXinTiao.Community.slnx
+
+      - name: Test
+        run: dotnet test 客户端/tests/PerformanceScheduler.Tests/PerformanceScheduler.Tests.csproj --no-restore -c Release --verbosity minimal
+
+      - name: Test community API
+        run: dotnet test 服务端/tests/SuiXinTiao.Community.Api.Tests/SuiXinTiao.Community.Api.Tests.csproj --no-restore -c Release --verbosity minimal
+
+      - name: Build community API
+        run: dotnet build 服务端/SuiXinTiao.Community.slnx --no-restore -c Release --verbosity minimal

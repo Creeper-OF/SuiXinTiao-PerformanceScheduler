@@ -1,0 +1,196 @@
+<UserControl x:Class="PerformanceScheduler.App.Views.PerformancePage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
+             xmlns:ui="clr-namespace:PerformanceScheduler.App.Ui"
+             xmlns:viewModels="clr-namespace:PerformanceScheduler.App.ViewModels">
+    <Grid Margin="20"
+          ui:StaggeredRevealBehavior.IsEnabled="{Binding UiStaggeredRevealEnabled}"
+          ui:StaggeredRevealBehavior.DurationMilliseconds="{Binding UiMotionDurationMilliseconds}">
+        <TabControl Style="{StaticResource SegmentedTabControlStyle}">
+            <!-- 分段 1: 帧率遥测 (PresentMon) -->
+            <TabItem Header="{Binding Strings[Segment.FrametimeTelemetry]}">
+                <Grid Margin="0,4,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- PresentMon 模块就绪状态 -->
+                    <Border Grid.Row="0" Margin="0,0,0,16" Padding="18" Style="{StaticResource CardStyle}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Style="{StaticResource PageEyebrowStyle}" Foreground="#FF2E9AAE" Text="{Binding Strings[Section.PresentMonIntegration]}" />
+                                <TextBlock Margin="0,6,0,0" FontSize="15" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding PresentMonIntegrationStatus}" />
+                                <TextBlock Margin="0,4,0,0" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource SidebarMutedBrush}" Text="{Binding Strings[Hint.PresentMonIntegration]}" />
+                                <Border Margin="0,10,0,0" Padding="10,6" Background="#FFF5FAFF" BorderBrush="#FFDCE6F5" BorderThickness="1" CornerRadius="10">
+                                    <TextBlock FontFamily="Consolas" FontSize="11" TextTrimming="CharacterEllipsis" ToolTip="{Binding PresentMonExecutablePathDisplay}" Text="{Binding PresentMonExecutablePathDisplay}" />
+                                </Border>
+                            </StackPanel>
+                            <WrapPanel Grid.Column="1" VerticalAlignment="Center">
+                                <Button Margin="0,0,8,0" Padding="10,6" FontSize="11" Content="{Binding Strings[Button.ChoosePresentMonExecutable]}" Command="{Binding ChoosePresentMonExecutableCommand}" Background="#FF2E9AAE" />
+                                <Button Padding="10,6" FontSize="11" Content="{Binding Strings[Button.ClearPresentMonExecutable]}" Command="{Binding ClearPresentMonExecutableCommand}" Background="#FF6A86B7" />
+                            </WrapPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- 下半部分：目标帧率与帧时间闭环监控 -->
+                    <Border Grid.Row="1" Padding="18" Style="{StaticResource CardStyle}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Left">
+                                    <TextBlock FontSize="14" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="目标游戏体验闭环 (Target Experience)" />
+                                    <TextBlock Margin="0,3,0,0" FontSize="11" Foreground="{StaticResource SidebarMutedBrush}" Text="设定目标帧率 (FPS) 与 P95 帧生成时间，系统实时评估并自动反馈调优" />
+                                </StackPanel>
+                                <primitives:ToggleButton DockPanel.Dock="Right" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding ProfileDraft.TargetExperienceEnabled, Mode=TwoWay}" />
+                            </DockPanel>
+                            <UniformGrid Grid.Row="1" Margin="0,16,0,0" Columns="4" IsEnabled="{Binding ProfileDraft.TargetExperienceEnabled}">
+                                <Border Margin="0,0,10,0" Padding="12" Background="#FFF9FCFD" BorderBrush="#FFE4EEF7" BorderThickness="1" CornerRadius="12">
+                                    <StackPanel>
+                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="目标帧率 (FPS):" />
+                                        <TextBox Margin="0,8,0,0" Height="30" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" FontWeight="Bold" Text="{Binding ProfileDraft.TargetFramesPerSecondText, UpdateSourceTrigger=PropertyChanged}" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Margin="5,0,5,0" Padding="12" Background="#FFF9FCFD" BorderBrush="#FFE4EEF7" BorderThickness="1" CornerRadius="12">
+                                    <StackPanel>
+                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="P95 帧时间 (ms):" />
+                                        <TextBox Margin="0,8,0,0" Height="30" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" FontWeight="Bold" Text="{Binding ProfileDraft.TargetFrameTimeP95MillisecondsText, UpdateSourceTrigger=PropertyChanged}" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Margin="5,0,5,0" Padding="12" Background="#FFF9FCFD" BorderBrush="#FFE4EEF7" BorderThickness="1" CornerRadius="12">
+                                    <StackPanel>
+                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="目标温度上限 (℃):" />
+                                        <TextBox Margin="0,8,0,0" Height="30" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" FontWeight="Bold" Text="{Binding ProfileDraft.TargetTemperatureCelsiusText, UpdateSourceTrigger=PropertyChanged}" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Margin="10,0,0,0" Padding="12" Background="#FFF9FCFD" BorderBrush="#FFE4EEF7" BorderThickness="1" CornerRadius="12">
+                                    <StackPanel>
+                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="目标功率限制 (W):" />
+                                        <TextBox Margin="0,8,0,0" Height="30" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" FontWeight="Bold" Text="{Binding ProfileDraft.TargetPowerWattsText, UpdateSourceTrigger=PropertyChanged}" />
+                                    </StackPanel>
+                                </Border>
+                            </UniformGrid>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- 分段 2: 硬件负载与引擎 -->
+            <TabItem Header="{Binding Strings[Segment.EngineAndLoad]}">
+                <Grid Margin="0,4,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- 系统运行指标概览 -->
+                    <UniformGrid Grid.Row="0" Margin="0,0,0,16" Columns="3">
+                        <Border Margin="0,0,10,0" Padding="16" Style="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource PageEyebrowStyle}" Text="{Binding Strings[Section.BasicMetrics]}" />
+                                <TextBlock Margin="0,8,0,0" FontSize="18" FontWeight="Bold" TextTrimming="CharacterEllipsis" Foreground="{StaticResource TitleBrush}" Text="{Binding MetricsSummary}" />
+                                <TextBlock Margin="0,4,0,0" FontSize="11" Foreground="{StaticResource SidebarMutedBrush}" Text="包含前台进程 CPU 使用率与内存物理工作集" />
+                            </StackPanel>
+                        </Border>
+                        <Border Margin="5,0,5,0" Padding="16" Style="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource PageEyebrowStyle}" Foreground="#FF1F7A5C" Text="{Binding Strings[Section.CurrentSchedulingState]}" />
+                                <TextBlock Margin="0,8,0,0" FontSize="18" FontWeight="Bold" TextTrimming="CharacterEllipsis" Foreground="{StaticResource TitleBrush}" Text="{Binding MatchedProfileName}" />
+                                <TextBlock Margin="0,4,0,0" FontSize="11" TextTrimming="CharacterEllipsis" Foreground="{StaticResource SidebarMutedBrush}" Text="{Binding ProfileReason}" />
+                            </StackPanel>
+                        </Border>
+                        <Border Margin="10,0,0,0" Padding="16" Style="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource PageEyebrowStyle}" Foreground="#FF8557D8" Text="{Binding Strings[Section.Priority]}" />
+                                <TextBlock Margin="0,8,0,0" FontSize="18" FontWeight="Bold" TextTrimming="CharacterEllipsis" Foreground="{StaticResource TitleBrush}" Text="{Binding PrioritySummary}" />
+                                <TextBlock Margin="0,4,0,0" FontSize="11" Foreground="{StaticResource SidebarMutedBrush}" Text="{Binding LastSummary}" />
+                            </StackPanel>
+                        </Border>
+                    </UniformGrid>
+
+                    <!-- GPU 引擎与硬件特性概况 -->
+                    <Border Grid.Row="1" Padding="18" Style="{StaticResource CardStyle}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Style="{StaticResource PageEyebrowStyle}" Foreground="#FF4E65A8" Text="Windows GPU 引擎性能计数器状态" />
+                            <StackPanel Grid.Row="1" Margin="0,12,0,0">
+                                <Border Margin="0,0,0,10" Padding="12" Background="#FFF6F8FD" BorderBrush="#FFE0E6F5" BorderThickness="1" CornerRadius="12">
+                                    <StackPanel>
+                                        <TextBlock FontSize="13" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding GpuAdapterSummary}" />
+                                        <TextBlock Margin="0,4,0,0" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource SidebarMutedBrush}" Text="{Binding GpuCapabilitySummary}" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Padding="12" Background="#FFF5FAFF" BorderBrush="#FFDCE6F5" BorderThickness="1" CornerRadius="12">
+                                    <StackPanel>
+                                        <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TitleBrush}" Text="GPU 驱动控频就绪评估" />
+                                        <TextBlock Margin="0,4,0,0" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource SidebarMutedBrush}" Text="{Binding GpuControlReadinessSummary}" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- 分段 3: 调度事件与日志 -->
+            <TabItem Header="{Binding Strings[Segment.AuditAndEvents]}">
+                <Grid Margin="0,4,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- 硬件自检 (Self-Test) -->
+                    <Border Grid.Row="0" Margin="0,0,0,16" Padding="16" Style="{StaticResource CardStyle}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Style="{StaticResource PageEyebrowStyle}" Foreground="#FF1F6F5E" Text="{Binding Strings[Section.HardwareSelfTest]}" />
+                                <TextBlock Margin="0,6,0,0" FontSize="14" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding SelfTestStatusSummary}" />
+                                <TextBlock Margin="0,4,0,0" FontSize="11" Foreground="{StaticResource SidebarMutedBrush}" Text="测试电源计划切换权限、NVML GPU 锁频、CPU Sets 及 Windows 性能计数器完整性" />
+                            </StackPanel>
+                            <Button Grid.Column="1" Padding="12,6" FontSize="11" VerticalAlignment="Center" Content="{Binding Strings[Button.RunFullSelfTest]}" Command="{Binding RunFullSelfTestCommand}" Background="#FF228670" />
+                        </Grid>
+                    </Border>
+
+                    <!-- 自检结果与调度日志列表 -->
+                    <Border Grid.Row="1" Padding="18" Style="{StaticResource CardStyle}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Left" FontSize="13" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="自检与调度事件报告" />
+                                <Button DockPanel.Dock="Right" Padding="8,4" FontSize="10" Content="{Binding Strings[Button.ClearStatusCenter]}" Command="{Binding ClearStatusCenterCommand}" Background="#FF6178A6" />
+                            </DockPanel>
+                            <ListBox Grid.Row="1" Margin="0,12,0,0" ItemsSource="{Binding SelfTestResultLines}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="0,0,0,6" Padding="10,6" Background="#FFF9FCFD" BorderBrush="#FFE4EEF7" BorderThickness="1" CornerRadius="8">
+                                            <TextBlock FontSize="12" FontFamily="Consolas" Foreground="{StaticResource TitleBrush}" Text="{Binding}" />
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</UserControl>

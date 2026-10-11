@@ -7,7 +7,7 @@
       "type": "process",
       "args": [
         "build",
-        "${workspaceFolder}/PerformanceScheduler.sln"
+        "${workspaceFolder}/客户端/PerformanceScheduler.sln"
       ],
       "problemMatcher": "$msCompile",
       "group": "build"
@@ -19,7 +19,7 @@
       "args": [
         "run",
         "--project",
-        "${workspaceFolder}/src/PerformanceScheduler.App/PerformanceScheduler.App.csproj"
+        "${workspaceFolder}/客户端/src/PerformanceScheduler.App/PerformanceScheduler.App.csproj"
       ],
       "problemMatcher": "$msCompile"
     },
@@ -29,10 +29,34 @@
       "type": "process",
       "args": [
         "test",
-        "${workspaceFolder}/PerformanceScheduler.sln"
+        "${workspaceFolder}/客户端/PerformanceScheduler.sln"
       ],
       "problemMatcher": "$msCompile",
       "group": "test"
+    },
+    {
+      "label": "build-community-api",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "build",
+        "${workspaceFolder}/服务端/src/SuiXinTiao.Community.Api/SuiXinTiao.Community.Api.csproj"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    },
+    {
+      "label": "run-community-api",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "run",
+        "--project",
+        "${workspaceFolder}/服务端/src/SuiXinTiao.Community.Api/SuiXinTiao.Community.Api.csproj",
+        "--launch-profile",
+        "SuiXinTiao.Community.Api"
+      ],
+      "problemMatcher": "$msCompile"
     }
   ]
 }

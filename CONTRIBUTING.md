@@ -9,6 +9,7 @@
 - 不绕过 Windows、BIOS、驱动或硬件厂商限制。
 - 涉及系统状态修改的功能必须有保护、日志和回滚方案。
 - 修改调度行为、回滚行为、Profile 语义或用户可见安全承诺时，必须同步更新文档。
+- 修改接口签名、DTO 字段或默认值时，必须同步更新 [API 与模块契约](docs/api-contracts.md)、测试和 [更新日志](CHANGELOG.md)。
 
 ## 分层约定
 
@@ -20,7 +21,7 @@
 
 ## 开发流程
 
-1. 先阅读 [项目总规划](docs/project-plan.md) 和 [安全基座](docs/safety-baseline.md)。
+1. 先阅读 [API 与模块契约](docs/api-contracts.md)、[项目总规划](docs/project-plan.md) 和 [安全基座](docs/safety-baseline.md)。
 2. 保持改动聚焦，一次提交解决一个清晰问题。
 3. 新增危险动作前，先设计 baseline、action result、失败原因和恢复方式。
 4. 为核心规则和回滚路径补测试。
@@ -29,8 +30,10 @@
 ## 本地构建
 
 ```powershell
-dotnet build PerformanceScheduler.sln
-dotnet test .\tests\PerformanceScheduler.Tests\PerformanceScheduler.Tests.csproj
+dotnet build .\客户端\PerformanceScheduler.sln
+dotnet test .\客户端\tests\PerformanceScheduler.Tests\PerformanceScheduler.Tests.csproj
+dotnet test .\服务端\tests\SuiXinTiao.Community.Api.Tests\SuiXinTiao.Community.Api.Tests.csproj
+dotnet build .\服务端\SuiXinTiao.Community.slnx
 ```
 
 如果本机没有安装对应 .NET SDK，请先安装 README 中声明的 SDK 版本。
@@ -49,4 +52,7 @@ dotnet test .\tests\PerformanceScheduler.Tests\PerformanceScheduler.Tests.csproj
 
 - 产品方向和路线图写入 [docs/project-plan.md](docs/project-plan.md)。
 - 安全事务和回滚规则写入 [docs/safety-baseline.md](docs/safety-baseline.md)。
+- 接口、DTO、默认值和模块边界写入 [docs/api-contracts.md](docs/api-contracts.md)。
+- 目标帧率、温度、功耗和噪音约束写入 [docs/target-experience.md](docs/target-experience.md)。
+- 每次功能、修复或安全变更写入根目录 [CHANGELOG.md](CHANGELOG.md)。
 - UI 和用户任务结构写入 [docs/功能结构.md](docs/功能结构.md)。

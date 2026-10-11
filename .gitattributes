@@ -1,0 +1,19 @@
+* text=auto eol=lf
+
+*.cs text working-tree-encoding=UTF-8
+*.xaml text working-tree-encoding=UTF-8
+*.json text working-tree-encoding=UTF-8
+*.md text working-tree-encoding=UTF-8
+*.ps1 text working-tree-encoding=UTF-8
+*.sln text working-tree-encoding=UTF-8
+*.slnx text working-tree-encoding=UTF-8
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.dll binary
+*.exe binary
+*.pdb binary
+*.zip binary
