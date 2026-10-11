@@ -121,7 +121,7 @@
             <Border Grid.Row="0" Grid.Column="1" Margin="8,0,0,8" Padding="24,18" Background="#FFFFFFFF" BorderBrush="#FFE5EAF2" BorderThickness="1" CornerRadius="16">
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource SidebarMutedBrush}" Text="GPU 利用率" />
-                    <TextBlock Margin="0,8,0,0" FontSize="36" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" Text="76%" />
+                    <TextBlock Margin="0,8,0,0" FontSize="36" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" Text="{Binding FocusedAppGpuUsagePercent, StringFormat={}{0:F0}%, TargetNullValue='--'}" />
                 </StackPanel>
             </Border>
 
@@ -129,7 +129,7 @@
             <Border Grid.Row="1" Grid.Column="0" Margin="0,8,8,0" Padding="24,18" Background="#FFFFFFFF" BorderBrush="#FFE5EAF2" BorderThickness="1" CornerRadius="16">
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource SidebarMutedBrush}" Text="实时 FPS" />
-                    <TextBlock Margin="0,8,0,0" FontSize="36" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" Text="118" />
+                    <TextBlock Margin="0,8,0,0" FontSize="36" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" Text="{Binding FocusedAppFps, StringFormat={}{0:F0}, TargetNullValue='--'}" />
                 </StackPanel>
             </Border>
 
@@ -137,7 +137,7 @@
             <Border Grid.Row="1" Grid.Column="1" Margin="8,8,0,0" Padding="24,18" Background="#FFFFFFFF" BorderBrush="#FFE5EAF2" BorderThickness="1" CornerRadius="16">
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource SidebarMutedBrush}" Text="供电模式" />
-                    <TextBlock Margin="0,8,0,0" FontSize="32" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" Text="AC 插电" />
+                    <TextBlock Margin="0,8,0,0" FontSize="32" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" Text="{Binding CurrentPowerSourceLabel, TargetNullValue='AC 插电'}" />
                 </StackPanel>
             </Border>
         </Grid>

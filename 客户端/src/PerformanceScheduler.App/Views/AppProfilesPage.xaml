@@ -38,7 +38,7 @@
                 </StackPanel>
                 <Button DockPanel.Dock="Right" Padding="18,10" HorizontalAlignment="Right" VerticalAlignment="Center"
                         Background="#FFEAF2FF" Foreground="{StaticResource AccentBrush}" BorderThickness="0"
-                        Content="编辑识别" Command="{Binding RefreshCommand}" />
+                        Content="编辑识别" Command="{Binding EditCurrentAppRecognitionCommand}" />
             </DockPanel>
         </Border>
 
@@ -65,7 +65,10 @@
                         <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#FF17823F" Text="已配置" />
                     </Border>
                     <StackPanel Grid.Row="4" Margin="0,20,0,0" Orientation="Horizontal">
-                        <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Cursor="Hand" Text="编辑 / 设为跟随全局" />
+                        <Button Padding="14,7" FontSize="12" Background="#FFEAF2FF" Foreground="{StaticResource AccentBrush}" BorderThickness="0"
+                                Content="编辑专属配置" Command="{Binding EditCurrentAppAcProfileCommand}" />
+                        <Button Margin="8,0,0,0" Padding="14,7" FontSize="12" Background="#FFF5F7FA" Foreground="{StaticResource SidebarMutedBrush}" BorderThickness="0"
+                                Content="设为跟随全局" Command="{Binding ResetCurrentAppAcToGlobalCommand}" />
                     </StackPanel>
                 </Grid>
             </Border>
@@ -86,7 +89,10 @@
                         <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="跟随全局 DC" />
                     </Border>
                     <StackPanel Grid.Row="4" Margin="0,20,0,0" Orientation="Horizontal">
-                        <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Cursor="Hand" Text="编辑 / 设为跟随全局" />
+                        <Button Padding="14,7" FontSize="12" Background="#FFEAF2FF" Foreground="{StaticResource AccentBrush}" BorderThickness="0"
+                                Content="编辑 / 新建专属" Command="{Binding EditCurrentAppDcProfileCommand}" />
+                        <Button Margin="8,0,0,0" Padding="14,7" FontSize="12" Background="#FFF5F7FA" Foreground="{StaticResource SidebarMutedBrush}" BorderThickness="0"
+                                Content="设为跟随全局" Command="{Binding ResetCurrentAppDcToGlobalCommand}" />
                     </StackPanel>
                 </Grid>
             </Border>

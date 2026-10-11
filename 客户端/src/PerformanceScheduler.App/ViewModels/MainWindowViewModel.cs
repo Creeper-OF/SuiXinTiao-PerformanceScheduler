@@ -100,6 +100,21 @@ public sealed partial class MainWindowViewModel : ObservableObject, IAsyncDispos
     private string _activePowerPlanName = string.Empty;
     private string _prioritySummary = string.Empty;
     private string _metricsSummary = string.Empty;
+    private double? _focusedAppCpuUsagePercent;
+    private double? _focusedAppGpuUsagePercent;
+    private double? _focusedAppFps;
+    private string _currentPowerSourceLabel = string.Empty;
+    private int _selectedGlobalPolicyDomainIndex;
+    private PowerPlanOptionViewModel? _globalAcPowerPlan;
+    private PowerPlanOptionViewModel? _globalDcPowerPlan;
+    private int _globalAcProcessorMaxStatePercent = 100;
+    private int _globalDcProcessorMaxStatePercent = 70;
+    private GpuPreferenceMode _globalAcGpuMode = GpuPreferenceMode.PreferHigherPerformance;
+    private GpuPreferenceMode _globalDcGpuMode = GpuPreferenceMode.DriverDefault;
+    private PriorityLevel _globalAcPriority = PriorityLevel.AboveNormal;
+    private PriorityLevel _globalDcPriority = PriorityLevel.Normal;
+    private bool _globalAcLowerBackground = true;
+    private bool _globalDcLowerBackground = true;
     private string _storageSummary = string.Empty;
     private string _dataLocationSummary = string.Empty;
     private string _monitoringStatus = string.Empty;
@@ -272,10 +287,24 @@ public sealed partial class MainWindowViewModel : ObservableObject, IAsyncDispos
             () => _configurationRecoverySafetyGate.RequiresManualAction,
             HandleCommandException);
         CreateDeviceStrategyPackageCommand = new AsyncCommand(CreateDeviceStrategyPackageAsync, onException: HandleCommandException);
+        ExportSelectedDeviceStrategyPackageCommand = new AsyncCommand(ExportSelectedDeviceStrategyPackageAsync, onException: HandleCommandException);
         ToggleDeviceStrategyPackageCommand = new AsyncCommand(ToggleSelectedDeviceStrategyPackageAsync, onException: HandleCommandException);
         AddProfileToDeviceStrategyCommand = new AsyncCommand(AddSelectedProfileToDeviceStrategyAsync, onException: HandleCommandException);
         RemoveProfileFromDeviceStrategyCommand = new AsyncCommand(RemoveSelectedProfileFromDeviceStrategyAsync, onException: HandleCommandException);
         RollbackProfileCommand = new AsyncCommand(RollbackProfileAsync, onException: HandleCommandException);
+        EditCurrentAppRecognitionCommand = new RelayCommand(_ => EditCurrentAppRecognition());
+        EditCurrentAppAcProfileCommand = new AsyncCommand(EditCurrentAppAcProfileAsync, onException: HandleCommandException);
+        ResetCurrentAppAcToGlobalCommand = new AsyncCommand(ResetCurrentAppAcToGlobalAsync, onException: HandleCommandException);
+        EditCurrentAppDcProfileCommand = new AsyncCommand(EditCurrentAppDcProfileAsync, onException: HandleCommandException);
+        ResetCurrentAppDcToGlobalCommand = new AsyncCommand(ResetCurrentAppDcToGlobalAsync, onException: HandleCommandException);
+        SaveGlobalPoliciesCommand = new AsyncCommand(SaveGlobalPoliciesAsync, onException: HandleCommandException);
+        SelectGlobalPolicyDomainCommand = new RelayCommand(parameter =>
+        {
+            if (int.TryParse(parameter?.ToString(), out var index))
+            {
+                SelectedGlobalPolicyDomainIndex = index;
+            }
+        });
         ResumeSchedulingCommand = new RelayCommand(
             _ => ResumeScheduling(),
             _ => IsSchedulingSuspended &&
@@ -357,6 +386,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IAsyncDispos
             if (!SetProperty(ref _selectedPageIndex, value))
             {
                 return;
+            }
+
+            if (value == 2)
+            {
+                _ = LoadGlobalPoliciesToUiAsync();
             }
 
             OnPropertyChanged(nameof(CurrentPageTitle));
@@ -512,6 +546,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IAsyncDispos
 
     public ICommand CreateDeviceStrategyPackageCommand { get; }
 
+    public ICommand ExportSelectedDeviceStrategyPackageCommand { get; }
+
     public ICommand ToggleDeviceStrategyPackageCommand { get; }
 
     public ICommand AddProfileToDeviceStrategyCommand { get; }
@@ -519,6 +555,20 @@ public sealed partial class MainWindowViewModel : ObservableObject, IAsyncDispos
     public ICommand RemoveProfileFromDeviceStrategyCommand { get; }
 
     public ICommand RollbackProfileCommand { get; }
+
+    public ICommand EditCurrentAppRecognitionCommand { get; }
+
+    public ICommand EditCurrentAppAcProfileCommand { get; }
+
+    public ICommand ResetCurrentAppAcToGlobalCommand { get; }
+
+    public ICommand EditCurrentAppDcProfileCommand { get; }
+
+    public ICommand ResetCurrentAppDcToGlobalCommand { get; }
+
+    public ICommand SaveGlobalPoliciesCommand { get; }
+
+    public ICommand SelectGlobalPolicyDomainCommand { get; }
 
     public ICommand ResumeSchedulingCommand { get; }
 
@@ -722,6 +772,108 @@ public sealed partial class MainWindowViewModel : ObservableObject, IAsyncDispos
     {
         get => _metricsSummary;
         private set => SetProperty(ref _metricsSummary, value);
+    }
+
+    public double? FocusedAppCpuUsagePercent
+    {
+        get => _focusedAppCpuUsagePercent;
+        private set => SetProperty(ref _focusedAppCpuUsagePercent, value);
+    }
+
+    public double? FocusedAppGpuUsagePercent
+    {
+        get => _focusedAppGpuUsagePercent;
+        private set => SetProperty(ref _focusedAppGpuUsagePercent, value);
+    }
+
+    public double? FocusedAppFps
+    {
+        get => _focusedAppFps;
+        private set => SetProperty(ref _focusedAppFps, value);
+    }
+
+    public string CurrentPowerSourceLabel
+    {
+        get => _currentPowerSourceLabel;
+        private set => SetProperty(ref _currentPowerSourceLabel, value);
+    }
+
+    public int SelectedGlobalPolicyDomainIndex
+    {
+        get => _selectedGlobalPolicyDomainIndex;
+        set
+        {
+            if (SetProperty(ref _selectedGlobalPolicyDomainIndex, value))
+            {
+                OnPropertyChanged(nameof(IsGlobalPowerDomainSelected));
+                OnPropertyChanged(nameof(IsGlobalPerformanceDomainSelected));
+                OnPropertyChanged(nameof(IsGlobalBackgroundDomainSelected));
+            }
+        }
+    }
+
+    public bool IsGlobalPowerDomainSelected => SelectedGlobalPolicyDomainIndex == 0;
+    public bool IsGlobalPerformanceDomainSelected => SelectedGlobalPolicyDomainIndex == 1;
+    public bool IsGlobalBackgroundDomainSelected => SelectedGlobalPolicyDomainIndex == 2;
+
+    public PowerPlanOptionViewModel? GlobalAcPowerPlan
+    {
+        get => _globalAcPowerPlan;
+        set => SetProperty(ref _globalAcPowerPlan, value);
+    }
+
+    public PowerPlanOptionViewModel? GlobalDcPowerPlan
+    {
+        get => _globalDcPowerPlan;
+        set => SetProperty(ref _globalDcPowerPlan, value);
+    }
+
+    public int GlobalAcProcessorMaxStatePercent
+    {
+        get => _globalAcProcessorMaxStatePercent;
+        set => SetProperty(ref _globalAcProcessorMaxStatePercent, value);
+    }
+
+    public int GlobalDcProcessorMaxStatePercent
+    {
+        get => _globalDcProcessorMaxStatePercent;
+        set => SetProperty(ref _globalDcProcessorMaxStatePercent, value);
+    }
+
+    public GpuPreferenceMode GlobalAcGpuMode
+    {
+        get => _globalAcGpuMode;
+        set => SetProperty(ref _globalAcGpuMode, value);
+    }
+
+    public GpuPreferenceMode GlobalDcGpuMode
+    {
+        get => _globalDcGpuMode;
+        set => SetProperty(ref _globalDcGpuMode, value);
+    }
+
+    public PriorityLevel GlobalAcPriority
+    {
+        get => _globalAcPriority;
+        set => SetProperty(ref _globalAcPriority, value);
+    }
+
+    public PriorityLevel GlobalDcPriority
+    {
+        get => _globalDcPriority;
+        set => SetProperty(ref _globalDcPriority, value);
+    }
+
+    public bool GlobalAcLowerBackground
+    {
+        get => _globalAcLowerBackground;
+        set => SetProperty(ref _globalAcLowerBackground, value);
+    }
+
+    public bool GlobalDcLowerBackground
+    {
+        get => _globalDcLowerBackground;
+        set => SetProperty(ref _globalDcLowerBackground, value);
     }
 
     public string StorageSummary
@@ -2461,6 +2613,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IAsyncDispos
                 result.Metrics.CpuUsagePercent is { } cpuUsage ? $"{cpuUsage:F1}%" : "--",
                 result.Metrics.WorkingSetMb,
                 result.Metrics.ThreadCount);
+        FocusedAppCpuUsagePercent = result.Metrics?.CpuUsagePercent;
+        CurrentPowerSourceLabel = activeApp is not null
+            ? GetPowerSourceLabel(activeApp.PowerSourceMode)
+            : T("Status.Unknown");
         LastSummary = BuildLocalizedResultSummary(result);
         LastRefreshTime = F("Status.LastScanFormat", result.OccurredAt.LocalDateTime);
     }
@@ -2921,6 +3077,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IAsyncDispos
         ActivePowerPlanName = T("Status.Unknown");
         PrioritySummary = T("Status.NoPriorityChange");
         MetricsSummary = T("Status.NoMetricsYet");
+        FocusedAppCpuUsagePercent = null;
+        FocusedAppGpuUsagePercent = null;
+        FocusedAppFps = null;
+        CurrentPowerSourceLabel = T("Status.Unknown");
         GpuAdapterSummary = T("Status.GpuAdapterUnavailable");
         GpuCapabilitySummary = F("Status.GpuCapabilitySummaryFormat", T("Common.No"), T("Common.No"), T("Common.No"), T("Common.No"));
         GpuControlReadinessSummary = F(

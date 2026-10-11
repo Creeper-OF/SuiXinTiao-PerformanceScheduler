@@ -5,6 +5,7 @@ using PerformanceScheduler.App.Services;
 using PerformanceScheduler.App.Views;
 using PerformanceScheduler.Core.Models;
 using PerformanceScheduler.Core.Profiles.Validation;
+using PerformanceScheduler.Infrastructure.Persistence;
 
 namespace PerformanceScheduler.App.ViewModels;
 
@@ -275,6 +276,7 @@ public sealed partial class MainWindowViewModel
             var conflictingGlobalDefault = existingProfiles.FirstOrDefault(profile =>
                 profile.IsEnabled &&
                 profile.IsGlobalDefault &&
+                profile.PowerSourceMode == ProfileDraft.PowerSourceMode &&
                 !string.Equals(profile.Id, ProfileDraft.Id, StringComparison.OrdinalIgnoreCase));
 
             if (conflictingGlobalDefault is not null)
@@ -382,6 +384,38 @@ public sealed partial class MainWindowViewModel
         await _profileManager.ExportProfilesAsync(dialog.FileName);
         _logger.Info($"Profiles exported to {dialog.FileName}.");
         SetProfileEditorStatus("Status.ExportedProfiles", dialog.FileName);
+    }
+
+    private async Task ExportSelectedDeviceStrategyPackageAsync()
+    {
+        if (SelectedDeviceStrategyPackage is null)
+        {
+            SetProfileEditorStatus("Status.SelectDeviceStrategyPackage");
+            return;
+        }
+
+        var package = SelectedDeviceStrategyPackage.Package;
+        var safeName = string.Join("_", package.Name.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries));
+        var dialog = new SaveFileDialog
+        {
+            Filter = "Device Strategy Package (*.json)|*.json|All Files (*.*)|*.*",
+            FileName = $"{safeName}-{package.PackageId}.json",
+            Title = T("Dialog.ExportDeviceStrategyPackageTitle")
+        };
+
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        var jsonOptions = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)
+        {
+            WriteIndented = true,
+            Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+        };
+        await AtomicFile.WriteJsonAsync(dialog.FileName, package, jsonOptions, CancellationToken.None);
+        _logger.Info($"Device strategy package '{package.Name}' ({package.PackageId}) exported to {dialog.FileName}.");
+        SetProfileEditorStatus("Status.ExportedDeviceStrategyPackage", dialog.FileName);
     }
 
     private async Task ExportMigrationPackageAsync()
@@ -1073,4 +1107,222 @@ public sealed partial class MainWindowViewModel
                 gpu);
     }
 
+    private void EditCurrentAppRecognition()
+    {
+        var app = _lastRunResult?.ActiveApp;
+        var appName = app?.ProcessName ?? (string.IsNullOrWhiteSpace(FocusedAppName) || FocusedAppName == T("Status.ForegroundAppUnavailable") ? "App" : FocusedAppName);
+        var exeName = !string.IsNullOrWhiteSpace(app?.ExecutablePath) ? System.IO.Path.GetFileName(app.ExecutablePath) : (!appName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? $"{appName}.exe" : appName);
+
+        // Switch to Strategy Library tab
+        SelectedPageIndex = 4;
+        ProfileDraft.Name = $"{appName} 性能方案";
+        ProfileDraft.ProcessNamesText = appName;
+        ProfileDraft.ExecutableNamesText = exeName;
+        SetProfileEditorStatus("Status.CurrentAppRecognitionNavigated", appName);
+    }
+
+    private async Task EditCurrentAppAcProfileAsync()
+    {
+        var app = _lastRunResult?.ActiveApp;
+        var appName = app?.ProcessName ?? (string.IsNullOrWhiteSpace(FocusedAppName) || FocusedAppName == T("Status.ForegroundAppUnavailable") ? "App" : FocusedAppName);
+        var exeName = !string.IsNullOrWhiteSpace(app?.ExecutablePath) ? System.IO.Path.GetFileName(app.ExecutablePath) : (!appName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? $"{appName}.exe" : appName);
+
+        var profiles = await _profileManager.LoadProfilesAsync();
+        var acProfile = profiles.FirstOrDefault(p =>
+            !p.IsGlobalDefault &&
+            (p.PowerSourceMode == PowerSourceMode.Ac || p.PowerSourceMode == PowerSourceMode.Any) &&
+            ((p.Match?.ProcessNames?.Any(n => string.Equals(n, appName, StringComparison.OrdinalIgnoreCase)) == true) ||
+             (p.Match?.ExecutableNames?.Any(n => string.Equals(n, exeName, StringComparison.OrdinalIgnoreCase)) == true)));
+
+        SelectedPageIndex = 4;
+        if (acProfile is not null)
+        {
+            SelectedProfile = Profiles.FirstOrDefault(item => string.Equals(item.Profile.Id, acProfile.Id, StringComparison.OrdinalIgnoreCase));
+        }
+        else
+        {
+            await CreateNewProfileAsync();
+            ProfileDraft.Name = $"{appName} AC插电方案";
+            ProfileDraft.PowerSourceMode = PowerSourceMode.Ac;
+            ProfileDraft.ProcessNamesText = appName;
+            ProfileDraft.ExecutableNamesText = exeName;
+        }
+        SetProfileEditorStatus("Status.CurrentAppAcNavigated", appName);
+    }
+
+    private async Task ResetCurrentAppAcToGlobalAsync()
+    {
+        var app = _lastRunResult?.ActiveApp;
+        var appName = app?.ProcessName ?? (string.IsNullOrWhiteSpace(FocusedAppName) || FocusedAppName == T("Status.ForegroundAppUnavailable") ? "App" : FocusedAppName);
+        var exeName = !string.IsNullOrWhiteSpace(app?.ExecutablePath) ? System.IO.Path.GetFileName(app.ExecutablePath) : (!appName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? $"{appName}.exe" : appName);
+
+        var profiles = await _profileManager.LoadProfilesAsync();
+        var matchingProfiles = profiles.Where(p =>
+            !p.IsGlobalDefault &&
+            (p.PowerSourceMode == PowerSourceMode.Ac || p.PowerSourceMode == PowerSourceMode.Any) &&
+            ((p.Match?.ProcessNames?.Any(n => string.Equals(n, appName, StringComparison.OrdinalIgnoreCase)) == true) ||
+             (p.Match?.ExecutableNames?.Any(n => string.Equals(n, exeName, StringComparison.OrdinalIgnoreCase)) == true))).ToArray();
+
+        foreach (var p in matchingProfiles)
+        {
+            var updated = p with { IsEnabled = false };
+            await RunConfigurationImportAsync(() => _profileManager.SaveProfileAsync(updated));
+        }
+
+        await LoadProfilesAsync();
+        SetProfileEditorStatus("Status.CurrentAppAcReset", appName);
+    }
+
+    private async Task EditCurrentAppDcProfileAsync()
+    {
+        var app = _lastRunResult?.ActiveApp;
+        var appName = app?.ProcessName ?? (string.IsNullOrWhiteSpace(FocusedAppName) || FocusedAppName == T("Status.ForegroundAppUnavailable") ? "App" : FocusedAppName);
+        var exeName = !string.IsNullOrWhiteSpace(app?.ExecutablePath) ? System.IO.Path.GetFileName(app.ExecutablePath) : (!appName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? $"{appName}.exe" : appName);
+
+        var profiles = await _profileManager.LoadProfilesAsync();
+        var dcProfile = profiles.FirstOrDefault(p =>
+            !p.IsGlobalDefault &&
+            p.PowerSourceMode == PowerSourceMode.Battery &&
+            ((p.Match?.ProcessNames?.Any(n => string.Equals(n, appName, StringComparison.OrdinalIgnoreCase)) == true) ||
+             (p.Match?.ExecutableNames?.Any(n => string.Equals(n, exeName, StringComparison.OrdinalIgnoreCase)) == true)));
+
+        SelectedPageIndex = 4;
+        if (dcProfile is not null)
+        {
+            SelectedProfile = Profiles.FirstOrDefault(item => string.Equals(item.Profile.Id, dcProfile.Id, StringComparison.OrdinalIgnoreCase));
+        }
+        else
+        {
+            await CreateNewProfileAsync();
+            ProfileDraft.Name = $"{appName} DC离电方案";
+            ProfileDraft.PowerSourceMode = PowerSourceMode.Battery;
+            ProfileDraft.ProcessNamesText = appName;
+            ProfileDraft.ExecutableNamesText = exeName;
+        }
+        SetProfileEditorStatus("Status.CurrentAppDcNavigated", appName);
+    }
+
+    private async Task ResetCurrentAppDcToGlobalAsync()
+    {
+        var app = _lastRunResult?.ActiveApp;
+        var appName = app?.ProcessName ?? (string.IsNullOrWhiteSpace(FocusedAppName) || FocusedAppName == T("Status.ForegroundAppUnavailable") ? "App" : FocusedAppName);
+        var exeName = !string.IsNullOrWhiteSpace(app?.ExecutablePath) ? System.IO.Path.GetFileName(app.ExecutablePath) : (!appName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? $"{appName}.exe" : appName);
+
+        var profiles = await _profileManager.LoadProfilesAsync();
+        var matchingProfiles = profiles.Where(p =>
+            !p.IsGlobalDefault &&
+            p.PowerSourceMode == PowerSourceMode.Battery &&
+            ((p.Match?.ProcessNames?.Any(n => string.Equals(n, appName, StringComparison.OrdinalIgnoreCase)) == true) ||
+             (p.Match?.ExecutableNames?.Any(n => string.Equals(n, exeName, StringComparison.OrdinalIgnoreCase)) == true))).ToArray();
+
+        foreach (var p in matchingProfiles)
+        {
+            var updated = p with { IsEnabled = false };
+            await RunConfigurationImportAsync(() => _profileManager.SaveProfileAsync(updated));
+        }
+
+        await LoadProfilesAsync();
+        SetProfileEditorStatus("Status.CurrentAppDcReset", appName);
+    }
+
+    public async Task SaveGlobalPoliciesAsync()
+    {
+        await LoadPowerPlansAsync();
+        var profiles = await _profileManager.LoadProfilesAsync();
+
+        // 1. Save or Update AC Global Default Profile
+        var existingAc = profiles.FirstOrDefault(p => p.IsGlobalDefault && p.PowerSourceMode == PowerSourceMode.Ac);
+        var acProfile = (existingAc ?? new PerformanceProfile
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Name = "全局插电 AC 默认策略",
+            IsGlobalDefault = true,
+            PowerSourceMode = PowerSourceMode.Ac
+        }) with
+        {
+            IsEnabled = true,
+            PowerPlan = (existingAc?.PowerPlan ?? new PowerPlanPreference()) with
+            {
+                SchemeGuid = GlobalAcPowerPlan?.SchemeGuid,
+                Advanced = new PowerPlanAdvancedPreference
+                {
+                    ProcessorMaxStatePercent = GlobalAcProcessorMaxStatePercent
+                }
+            },
+            Priority = (existingAc?.Priority ?? new PriorityPreference()) with
+            {
+                ForegroundPriority = GlobalAcPriority,
+                LowerBackgroundProcesses = GlobalAcLowerBackground
+            },
+            Gpu = (existingAc?.Gpu ?? new GpuPreference()) with
+            {
+                Mode = GlobalAcGpuMode
+            }
+        };
+
+        // 2. Save or Update DC Global Default Profile
+        var existingDc = profiles.FirstOrDefault(p => p.IsGlobalDefault && p.PowerSourceMode == PowerSourceMode.Battery);
+        var dcProfile = (existingDc ?? new PerformanceProfile
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Name = "全局离电 DC 默认策略",
+            IsGlobalDefault = true,
+            PowerSourceMode = PowerSourceMode.Battery
+        }) with
+        {
+            IsEnabled = true,
+            PowerPlan = (existingDc?.PowerPlan ?? new PowerPlanPreference()) with
+            {
+                SchemeGuid = GlobalDcPowerPlan?.SchemeGuid,
+                Advanced = new PowerPlanAdvancedPreference
+                {
+                    ProcessorMaxStatePercent = GlobalDcProcessorMaxStatePercent
+                }
+            },
+            Priority = (existingDc?.Priority ?? new PriorityPreference()) with
+            {
+                ForegroundPriority = GlobalDcPriority,
+                LowerBackgroundProcesses = GlobalDcLowerBackground
+            },
+            Gpu = (existingDc?.Gpu ?? new GpuPreference()) with
+            {
+                Mode = GlobalDcGpuMode
+            }
+        };
+
+        await RunConfigurationImportAsync(async () =>
+        {
+            await _profileManager.SaveProfileAsync(acProfile);
+            await _profileManager.SaveProfileAsync(dcProfile);
+        });
+
+        await LoadProfilesAsync();
+        SetProfileEditorStatus("Status.GlobalPolicyAcSaved");
+    }
+
+    public async Task LoadGlobalPoliciesToUiAsync()
+    {
+        await LoadPowerPlansAsync();
+        var profiles = await _profileManager.LoadProfilesAsync();
+        var ac = profiles.FirstOrDefault(p => p.IsGlobalDefault && p.PowerSourceMode == PowerSourceMode.Ac);
+        var dc = profiles.FirstOrDefault(p => p.IsGlobalDefault && p.PowerSourceMode == PowerSourceMode.Battery);
+
+        if (ac is not null)
+        {
+            GlobalAcPowerPlan = PowerPlanOptions.FirstOrDefault(opt => opt.SchemeGuid == ac.PowerPlan.SchemeGuid) ?? PowerPlanOptions.FirstOrDefault();
+            GlobalAcProcessorMaxStatePercent = ac.PowerPlan.Advanced.ProcessorMaxStatePercent ?? 100;
+            GlobalAcGpuMode = ac.Gpu.Mode;
+            GlobalAcPriority = ac.Priority.ForegroundPriority;
+            GlobalAcLowerBackground = ac.Priority.LowerBackgroundProcesses;
+        }
+
+        if (dc is not null)
+        {
+            GlobalDcPowerPlan = PowerPlanOptions.FirstOrDefault(opt => opt.SchemeGuid == dc.PowerPlan.SchemeGuid) ?? PowerPlanOptions.FirstOrDefault();
+            GlobalDcProcessorMaxStatePercent = dc.PowerPlan.Advanced.ProcessorMaxStatePercent ?? 70;
+            GlobalDcGpuMode = dc.Gpu.Mode;
+            GlobalDcPriority = dc.Priority.ForegroundPriority;
+            GlobalDcLowerBackground = dc.Priority.LowerBackgroundProcesses;
+        }
+    }
 }

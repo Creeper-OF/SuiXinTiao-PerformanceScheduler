@@ -332,6 +332,7 @@
   "Status.SavedProfile": "已保存应用配置：{0}。",
   "Status.ImportedProfiles": "已从 {0} 导入应用配置。",
   "Status.ExportedProfiles": "已将应用配置导出到 {0}。",
+  "Status.ExportedDeviceStrategyPackage": "已将机型策略包导出到 {0}。",
   "Status.ExportedMigrationPackage": "已将迁移包导出到 {0}。",
   "Status.DiagnosticPackageReady": "诊断包默认脱敏，不包含原始数据库、配置文件、窗口标题或背景图片。",
   "Status.DiagnosticPackageExported": "已将脱敏诊断包导出到 {0}。",
@@ -619,6 +620,7 @@
   "Dialog.ImportProfilesTitle": "导入应用配置",
   "Dialog.ExportProfilesTitle": "导出应用配置",
   "Dialog.ImportMigrationPackageTitle": "导入迁移包",
+  "Dialog.ExportDeviceStrategyPackageTitle": "导出机型策略包",
   "Dialog.ExportMigrationPackageTitle": "导出迁移包",
   "Dialog.ExportDiagnosticPackageTitle": "导出脱敏诊断包",
   "Dialog.ImportMigrationPackageQuestion": "该迁移包包含 {0} 个应用配置、{1} 个机型策略包。包含软件设置：{2}。\n\n设备检查：{3}\n\n是否继续导入？",
@@ -871,5 +873,15 @@
   "Tray.PauseScheduling": "暂停调度",
   "Tray.ResumeScheduling": "恢复调度",
   "Tray.EmergencyRollback": "一键紧急回滚",
-  "Tray.Exit": "退出随芯调"
+  "Tray.Exit": "退出随芯调",
+  "Dialog.CreateDeviceStrategyTitle": "新建机型策略包",
+  "Dialog.CreateDeviceStrategyPrompt": "请输入策略包名称：",
+  "Dialog.CreateDeviceStrategyEmpty": "策略包名称不能为空。",
+  "Status.CurrentAppRecognitionNavigated": "已载入应用 {0} 的识别规则，请在方案库中微调。",
+  "Status.CurrentAppAcNavigated": "已载入应用 {0} 的 AC 插电专属方案。",
+  "Status.CurrentAppDcNavigated": "已载入应用 {0} 的 DC 离电专属方案。",
+  "Status.CurrentAppAcReset": "已将应用 {0} 的 AC 方案设为跟随全局。",
+  "Status.CurrentAppDcReset": "已将应用 {0} 的 DC 方案设为跟随全局。",
+  "Status.GlobalPolicyAcSaved": "全局默认 AC 插电策略已成功保存。",
+  "Status.GlobalPolicyDcSaved": "全局默认 DC 离电策略已成功保存。"
 }

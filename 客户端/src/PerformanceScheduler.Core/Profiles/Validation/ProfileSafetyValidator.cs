@@ -53,16 +53,20 @@ public static class ProfileSafetyValidator
             AddError(issues, "DuplicateProfileId", $"Profile id '{duplicateId}' is duplicated.");
         }
 
-        var enabledGlobalDefaults = validProfiles
+        var globalDefaultsByPowerSource = validProfiles
             .Where(profile => profile.IsEnabled && profile.IsGlobalDefault)
-            .Select(profile => profile.Name)
-            .ToArray();
-        if (enabledGlobalDefaults.Length > 1)
+            .GroupBy(profile => profile.PowerSourceMode);
+
+        foreach (var group in globalDefaultsByPowerSource)
         {
-            AddError(
-                issues,
-                "MultipleEnabledGlobalDefaults",
-                $"Only one enabled global default profile is allowed; found: {string.Join(", ", enabledGlobalDefaults)}.");
+            var names = group.Select(profile => profile.Name).ToArray();
+            if (names.Length > 1)
+            {
+                AddError(
+                    issues,
+                    "MultipleEnabledGlobalDefaults",
+                    $"Only one enabled global default profile is allowed for {group.Key}; found: {string.Join(", ", names)}.");
+            }
         }
 
         return new ProfileSafetyValidationResult { Issues = issues };

@@ -67,36 +67,37 @@
                     </Grid.RowDefinitions>
 
                     <TextBlock Grid.Row="0" FontSize="20" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding SelectedDeviceStrategyPackage.Name, TargetNullValue='游戏本优化包'}" />
-                    <TextBlock Grid.Row="1" Margin="0,4,0,16" FontSize="13" Foreground="{StaticResource SidebarMutedBrush}" Text="包含 3 个 Profile · 2 条应用规则 · 全局 AC/DC 默认" />
+                    <TextBlock Grid.Row="1" Margin="0,4,0,16" FontSize="13" Foreground="{StaticResource SidebarMutedBrush}" Text="{Binding SelectedDeviceStrategyPackage.Summary, TargetNullValue='机型优化策略包 · 包含多项专用性能方案与硬件控制'}" />
 
                     <!-- 分段胶囊: Profile | 应用匹配 | 全局策略 -->
                     <Border Grid.Row="2" Margin="0,0,0,16" HorizontalAlignment="Left" Padding="4" Background="#FFE8EEF5" BorderBrush="#FFDCE5F0" BorderThickness="1" CornerRadius="12">
                         <StackPanel Orientation="Horizontal">
                             <Border Padding="16,6" Background="#FFFFFFFF" CornerRadius="10">
-                                <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="Profile" />
+                                <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="包含 Profile" />
                             </Border>
                             <Border Margin="4,0,0,0" Padding="16,6" Background="Transparent" CornerRadius="10">
-                                <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource SidebarMutedBrush}" Text="应用匹配" />
+                                <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource SidebarMutedBrush}" Text="目标设备" />
                             </Border>
                             <Border Margin="4,0,0,0" Padding="16,6" Background="Transparent" CornerRadius="10">
-                                <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource SidebarMutedBrush}" Text="全局策略" />
+                                <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource SidebarMutedBrush}" Text="{Binding SelectedDeviceStrategyPackage.Meta, TargetNullValue='本地机型'}" />
                             </Border>
                         </StackPanel>
                     </Border>
 
-                    <!-- 包含的 Profile 方案列表 -->
+                    <!-- 包含的 Profile 方案列表 (绑定当前策略包所含方案) -->
                     <ListBox Grid.Row="3" Background="Transparent" BorderThickness="0"
-                             ItemsSource="{Binding Profiles}"
-                             SelectedItem="{Binding SelectedProfile, Mode=TwoWay}">
+                             ItemsSource="{Binding SelectedDeviceStrategyProfiles}"
+                             SelectedItem="{Binding SelectedDeviceStrategyProfile, Mode=TwoWay}">
                         <ListBox.ItemTemplate>
-                            <DataTemplate DataType="{x:Type viewModels:ProfileListItemViewModel}">
+                            <DataTemplate DataType="{x:Type viewModels:DeviceStrategyProfileItemViewModel}">
                                 <Border Margin="0,0,0,10" Padding="16,14" Background="#FFF9FCFE" BorderBrush="#FFE5EDF5" BorderThickness="1" CornerRadius="12">
                                     <DockPanel>
                                         <StackPanel DockPanel.Dock="Left">
                                             <TextBlock FontSize="15" FontWeight="Bold" Foreground="{StaticResource TitleBrush}" Text="{Binding Name}" />
-                                            <TextBlock Margin="0,4,0,0" FontSize="12" Foreground="{StaticResource SidebarMutedBrush}" Text="{Binding Summary}" />
+                                            <TextBlock Margin="0,4,0,0" FontSize="12" Foreground="{StaticResource SidebarMutedBrush}" Text="{Binding Meta}" />
                                         </StackPanel>
-                                        <Button DockPanel.Dock="Right" Padding="12,6" FontSize="11" Background="#FFEAF2FF" Foreground="{StaticResource AccentBrush}" BorderThickness="0" Content="编辑" />
+                                        <Button DockPanel.Dock="Right" Padding="12,6" FontSize="11" Background="#FFEAF2FF" Foreground="{StaticResource AccentBrush}" BorderThickness="0"
+                                                Content="移除" Command="{Binding DataContext.RemoveProfileFromDeviceStrategyCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                                     </DockPanel>
                                 </Border>
                             </DataTemplate>
@@ -105,10 +106,10 @@
 
                     <!-- 底部操作按钮: 导出策略包 -->
                     <DockPanel Grid.Row="4" Margin="0,16,0,0">
-                        <Button DockPanel.Dock="Right" Padding="18,10" Content="导出策略包" Command="{Binding ExportProfilesCommand}" Background="#FFEAF2FF" Foreground="{StaticResource AccentBrush}" BorderThickness="0" />
+                        <Button DockPanel.Dock="Right" Padding="18,10" Content="导出策略包" Command="{Binding ExportSelectedDeviceStrategyPackageCommand}" Background="#FFEAF2FF" Foreground="{StaticResource AccentBrush}" BorderThickness="0" />
                         <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
-                            <Button Margin="0,0,10,0" Padding="14,8" Content="新建方案" Command="{Binding NewProfileCommand}" />
-                            <Button Padding="14,8" Content="导入方案" Command="{Binding ImportProfilesCommand}" Background="#FF315F72" />
+                            <Button Margin="0,0,10,0" Padding="14,8" Content="切换启用状态" Command="{Binding ToggleDeviceStrategyPackageCommand}" />
+                            <Button Padding="14,8" Content="加入当前方案" Command="{Binding AddProfileToDeviceStrategyCommand}" Background="#FF315F72" />
                         </StackPanel>
                     </DockPanel>
                 </Grid>

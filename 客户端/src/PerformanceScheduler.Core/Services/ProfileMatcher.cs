@@ -7,15 +7,25 @@ public sealed class ProfileMatcher
     public ProfileMatchResult? Match(FocusedAppContext app, IEnumerable<PerformanceProfile> profiles)
     {
         ProfileMatchResult? bestMatch = null;
-        PerformanceProfile? globalDefaultProfile = null;
+        bool bestMatchIsExactPowerSource = false;
+        PerformanceProfile? exactGlobalDefaultProfile = null;
+        PerformanceProfile? anyGlobalDefaultProfile = null;
 
         foreach (var profile in profiles.Where(static candidate => candidate.IsEnabled))
         {
             if (profile.IsGlobalDefault)
             {
-                if (MatchesPowerSource(app, profile))
+                if (profile.PowerSourceMode == app.PowerSourceMode)
                 {
-                    globalDefaultProfile ??= profile;
+                    exactGlobalDefaultProfile ??= profile;
+                }
+                else if (profile.PowerSourceMode == PowerSourceMode.Any)
+                {
+                    anyGlobalDefaultProfile ??= profile;
+                }
+                else if (MatchesPowerSource(app, profile))
+                {
+                    anyGlobalDefaultProfile ??= profile;
                 }
 
                 continue;
@@ -28,13 +38,37 @@ public sealed class ProfileMatcher
                 continue;
             }
 
-            if (bestMatch is null || score > bestMatch.Score)
+            bool isExactPowerSource = profile.PowerSourceMode == app.PowerSourceMode &&
+                                      app.PowerSourceMode != PowerSourceMode.Any;
+
+            // Strict Priority:
+            // 1. Exact PowerSourceMode match always beats PowerSourceMode.Any match regardless of score
+            // 2. If both have the same power source specificity, higher score wins
+            bool isBetterMatch = bestMatch is null;
+            if (bestMatch is not null)
+            {
+                if (isExactPowerSource && !bestMatchIsExactPowerSource)
+                {
+                    isBetterMatch = true;
+                }
+                else if (!isExactPowerSource && bestMatchIsExactPowerSource)
+                {
+                    isBetterMatch = false;
+                }
+                else
+                {
+                    isBetterMatch = score > bestMatch.Score;
+                }
+            }
+
+            if (isBetterMatch)
             {
                 bestMatch = new ProfileMatchResult(
                     profile,
                     score,
                     BuildLegacyReason(reasons),
                     reasons);
+                bestMatchIsExactPowerSource = isExactPowerSource;
             }
         }
 
@@ -43,6 +77,7 @@ public sealed class ProfileMatcher
             return bestMatch;
         }
 
+        var globalDefaultProfile = exactGlobalDefaultProfile ?? anyGlobalDefaultProfile;
         if (globalDefaultProfile is null)
         {
             return null;

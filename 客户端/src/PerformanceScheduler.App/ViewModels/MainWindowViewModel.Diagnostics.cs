@@ -303,6 +303,15 @@ public sealed partial class MainWindowViewModel
             targetExperience,
             result.ResourceArbitrationCandidates);
         SetTelemetryTrends(analysis.Trends);
+        FocusedAppGpuUsagePercent = analysis.ResourceContention.ForegroundGpuUsagePercent ?? analysis.ResourcePressure.SystemGpuUsagePercent;
+        var fpsMetric = result.Observation.ProviderSamples
+            .Where(sample => sample.Status == TelemetryCollectionStatus.Collected)
+            .SelectMany(sample => sample.Metrics)
+            .FirstOrDefault(metric => metric.Kind == TelemetryMetricKind.FramesPerSecondAverage);
+        if (fpsMetric is not null)
+        {
+            FocusedAppFps = fpsMetric.Value;
+        }
 
         TelemetryObservationLines.Add(analysis.ResourcePressure.HasData
             ? F(

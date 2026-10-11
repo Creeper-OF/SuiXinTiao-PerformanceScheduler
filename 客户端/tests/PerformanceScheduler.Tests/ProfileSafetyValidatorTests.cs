@@ -142,6 +142,29 @@ public sealed class ProfileSafetyValidatorTests
         Assert.Contains(result.Errors, issue => issue.Code == "MultipleEnabledGlobalDefaults");
     }
 
+    [Fact]
+    public void EvaluateLibrary_AllowsSimultaneousAcAndBatteryGlobalDefaults()
+    {
+        var acDefault = CreateSafeProfile() with
+        {
+            Id = "ac-default",
+            Name = "Global AC",
+            IsGlobalDefault = true,
+            PowerSourceMode = PowerSourceMode.Ac
+        };
+        var batteryDefault = CreateSafeProfile() with
+        {
+            Id = "dc-default",
+            Name = "Global DC",
+            IsGlobalDefault = true,
+            PowerSourceMode = PowerSourceMode.Battery
+        };
+
+        var result = ProfileSafetyValidator.EvaluateLibrary([acDefault, batteryDefault]);
+
+        Assert.DoesNotContain(result.Errors, issue => issue.Code == "MultipleEnabledGlobalDefaults");
+    }
+
     private static PerformanceProfile CreateSafeProfile() => new()
     {
         Id = "safe-profile",

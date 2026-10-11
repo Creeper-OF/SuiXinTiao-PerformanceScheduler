@@ -332,6 +332,7 @@
   "Status.SavedProfile": "Saved profile {0}.",
   "Status.ImportedProfiles": "Imported profiles from {0}.",
   "Status.ExportedProfiles": "Exported profiles to {0}.",
+  "Status.ExportedDeviceStrategyPackage": "Exported device strategy pack to {0}.",
   "Status.ExportedMigrationPackage": "Exported migration package to {0}.",
   "Status.DiagnosticPackageReady": "Diagnostic packages are redacted by default and exclude raw databases, configuration files, window titles, and background images.",
   "Status.DiagnosticPackageExported": "Exported the redacted diagnostic package to {0}.",
@@ -619,6 +620,7 @@
   "Dialog.ImportProfilesTitle": "Import Profiles",
   "Dialog.ExportProfilesTitle": "Export Profiles",
   "Dialog.ImportMigrationPackageTitle": "Import Migration Package",
+  "Dialog.ExportDeviceStrategyPackageTitle": "Export Device Strategy Pack",
   "Dialog.ExportMigrationPackageTitle": "Export Migration Package",
   "Dialog.ExportDiagnosticPackageTitle": "Export Redacted Diagnostic Package",
   "Dialog.ImportMigrationPackageQuestion": "This package contains {0} app profile(s) and {1} model strategy pack(s). Includes settings: {2}.\n\nDevice check: {3}\n\nContinue importing?",
@@ -871,5 +873,15 @@
   "Tray.PauseScheduling": "Pause Scheduling",
   "Tray.ResumeScheduling": "Resume Scheduling",
   "Tray.EmergencyRollback": "Emergency Rollback",
-  "Tray.Exit": "Exit SuiXinTiao"
+  "Tray.Exit": "Exit SuiXinTiao",
+  "Dialog.CreateDeviceStrategyTitle": "Create Device Strategy Package",
+  "Dialog.CreateDeviceStrategyPrompt": "Enter strategy package name:",
+  "Dialog.CreateDeviceStrategyEmpty": "Strategy package name cannot be empty.",
+  "Status.CurrentAppRecognitionNavigated": "Loaded match criteria for app '{0}'. Tune rules in Strategy Library.",
+  "Status.CurrentAppAcNavigated": "Loaded AC Plugged-in profile for app '{0}'.",
+  "Status.CurrentAppDcNavigated": "Loaded DC Battery profile for app '{0}'.",
+  "Status.CurrentAppAcReset": "Reset app '{0}' AC profile to follow global default.",
+  "Status.CurrentAppDcReset": "Reset app '{0}' DC profile to follow global default.",
+  "Status.GlobalPolicyAcSaved": "Global default AC policy saved successfully.",
+  "Status.GlobalPolicyDcSaved": "Global default DC policy saved successfully."
 }

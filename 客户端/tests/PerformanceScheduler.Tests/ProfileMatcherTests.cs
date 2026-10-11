@@ -255,4 +255,87 @@ public sealed class ProfileMatcherTests
         Assert.Equal(expectedRule, reason.RuleValue);
         Assert.Equal(expectedActual, reason.ActualValue);
     }
+
+    [Fact]
+    public void Match_ExactPowerSourceMatchBeatsAnyMatchEvenIfAnyHasHigherScore()
+    {
+        var matcher = new ProfileMatcher();
+        var app = new FocusedAppContext
+        {
+            ProcessId = 100,
+            ProcessName = "eldenring",
+            ExecutablePath = @"C:\Games\EldenRing\eldenring.exe",
+            WindowTitle = "ELDEN RING",
+            WindowHandle = 123,
+            Classification = ProcessClassification.Game,
+            PowerSourceMode = PowerSourceMode.Ac
+        };
+
+        // Any profile has Executable (100) + Process (80) + Title (40) = 220 pts
+        var anyProfile = new PerformanceProfile
+        {
+            Name = "Any Game Profile",
+            PowerSourceMode = PowerSourceMode.Any,
+            Match = new ProfileMatchCriteria
+            {
+                ExecutableNames = new[] { "eldenring.exe" },
+                ProcessNames = new[] { "eldenring" },
+                WindowTitleContains = new[] { "ELDEN RING" }
+            }
+        };
+
+        // Exact AC profile only has ProcessName (80) + PowerSource (15) = 95 pts
+        var acProfile = new PerformanceProfile
+        {
+            Name = "AC Dedicated Profile",
+            PowerSourceMode = PowerSourceMode.Ac,
+            Match = new ProfileMatchCriteria
+            {
+                ProcessNames = new[] { "eldenring" }
+            }
+        };
+
+        var result = matcher.Match(app, new[] { anyProfile, acProfile });
+
+        Assert.NotNull(result);
+        Assert.Equal("AC Dedicated Profile", result!.Profile.Name);
+    }
+
+    [Fact]
+    public void Match_PrefersExactPowerSourceGlobalDefaultOverAnyGlobalDefault()
+    {
+        var matcher = new ProfileMatcher();
+        var app = new FocusedAppContext
+        {
+            ProcessId = 42,
+            ProcessName = "notepad",
+            WindowTitle = "Notepad",
+            WindowHandle = 789,
+            PowerSourceMode = PowerSourceMode.Battery
+        };
+
+        var anyDefault = new PerformanceProfile
+        {
+            Name = "Global Any Default",
+            IsGlobalDefault = true,
+            PowerSourceMode = PowerSourceMode.Any
+        };
+
+        var dcDefault = new PerformanceProfile
+        {
+            Name = "Global DC Default",
+            IsGlobalDefault = true,
+            PowerSourceMode = PowerSourceMode.Battery
+        };
+
+        // Regardless of order, DC Default must win
+        var result1 = matcher.Match(app, new[] { anyDefault, dcDefault });
+        Assert.NotNull(result1);
+        Assert.Equal("Global DC Default", result1!.Profile.Name);
+
+        var result2 = matcher.Match(app, new[] { dcDefault, anyDefault });
+        Assert.NotNull(result2);
+        Assert.Equal("Global DC Default", result2!.Profile.Name);
+    }
 }
+
